@@ -39,9 +39,11 @@ The shortcut layout follows ML4W's defaults, except where noted.
 |-----------------------|-----------------------------------------|
 | SUPER + 1–0           | Go to workspace 1–10                    |
 | SUPER + SHIFT + 1–0   | Send window to workspace 1–10           |
-| CTRL + SUPER + ←/→    | Previous / next desktop (Windows 11)    |
+| SUPER + G             | Go to any workspace: type the number    |
+| SUPER + SHIFT + G     | Send window to any workspace: type the number |
+| CTRL + SUPER + ←/→    | Previous / next existing workspace      |
 | SUPER + Tab           | Previous workspace                      |
-| SUPER + scroll        | Next / previous workspace               |
+| SUPER + scroll        | Next / previous existing workspace      |
 | 4-finger swipe        | Next / previous desktop                 |
 | 3-finger swipe        | Next / previous window                  |
 

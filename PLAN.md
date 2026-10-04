@@ -421,3 +421,14 @@ _Session 24 — 2026-10-04_
   Settings, not on home. The warm screen test waited for the timezone.
 - Night light confirmed on the real screen, in the evening. The timezone was set to
   the local zone (`timedatectl`), since the system had been on UTC. The switch was left on.
+
+_Session 26 — 2026-10-04_
+
+- **btop and cava follow the wallpaper live.** btop was never themed: it ignores an absolute
+  path in `color_theme`. Its theme is now `btop/themes/a4a.theme` (generated, gitignored),
+  and matugen sends SIGUSR2 to btop and cava after each change. Tested on a pty with the
+  real config.
+- **Workspaces like ML4W.** SUPER+G goes to any workspace by number, SUPER+SHIFT+G sends a
+  window there (`scripts/a4a-workspace`). Scroll and CTRL+arrows step through existing
+  workspaces only. Not yet tried by hand: the wofi prompt (ydotool needs sudo here), so
+  press SUPER+G and check it.

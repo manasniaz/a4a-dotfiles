@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Jump to any workspace by number, so ones past 10 are reachable without stepping.
+#   a4a-workspace go     ask for a number, switch to it     (SUPER+G)
+#   a4a-workspace move   ask for a number, send the window  (SUPER+SHIFT+G)
+set -euo pipefail
+
+mode="${1:-}"
+case "$mode" in
+    go|move) ;;
+    *) echo "usage: a4a-workspace {go|move}" >&2; exit 2 ;;
+esac
+
+# wofi in dmenu mode with nothing to pick: the typed text is the answer.
+n="$(printf '' | wofi --dmenu --lines 0 --prompt "Workspace" || true)"
+n="${n//[[:space:]]/}"
+# Esc, an empty line or anything that isn't a number: do nothing.
+[[ "$n" =~ ^[1-9][0-9]*$ ]] || exit 0
+
+if [[ "$mode" == go ]]; then
+    hyprctl dispatch "hl.dsp.focus({ workspace = $n })"
+else
+    hyprctl dispatch "hl.dsp.window.move({ workspace = $n })"
+fi

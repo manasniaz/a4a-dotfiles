@@ -100,8 +100,8 @@ PanelWindow {
                 anchors.centerIn: parent
             }
 
-            // Scroll anywhere on the pill to move between desktops, as on the Windows
-            // taskbar. It takes no clicks, so the workspace buttons still get them.
+            // Scroll anywhere on the pill to move to the next workspace that exists,
+            // as SUPER+scroll does (ML4W). It takes no clicks, so the buttons still get them.
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.NoButton
@@ -109,8 +109,8 @@ PanelWindow {
                     if (wheel.angleDelta.y === 0)
                         return
                     Hyprland.dispatch(wheel.angleDelta.y < 0
-                        ? "hl.dsp.focus({ workspace = 'r+1' })"
-                        : "hl.dsp.focus({ workspace = 'r-1' })")
+                        ? "hl.dsp.focus({ workspace = 'e+1' })"
+                        : "hl.dsp.focus({ workspace = 'e-1' })")
                 }
             }
         }

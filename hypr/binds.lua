@@ -60,10 +60,14 @@ for i = 1, 10 do
     bind(key,              hl.dsp.focus({ workspace = i }))
     bind("SHIFT + " .. key, hl.dsp.window.move({ workspace = i }))
 end
--- Windows 11 style: CTRL+Win+Left/Right moves to the neighbouring desktop.
--- "r" steps through every workspace, empty ones included, like Windows desktops.
-bind("CTRL + left",  hl.dsp.focus({ workspace = "r-1" }))
-bind("CTRL + right", hl.dsp.focus({ workspace = "r+1" }))
+-- Any workspace, not only 1-10: SUPER+G asks for a number and goes there,
+-- SUPER+SHIFT+G sends the window there (scripts/a4a-workspace).
+bind("G",         hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/a4a-workspace go"))
+bind("SHIFT + G", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/a4a-workspace move"))
+-- As in ML4W, the arrows and the scroll wheel step through the workspaces that
+-- exist ("e"), so empty ones are skipped. Desktops are then reached by number.
+bind("CTRL + left",  hl.dsp.focus({ workspace = "e-1" }))
+bind("CTRL + right", hl.dsp.focus({ workspace = "e+1" }))
 bind("Tab",        hl.dsp.focus({ workspace = "previous" }))
 bind("mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 bind("mouse_up",   hl.dsp.focus({ workspace = "e-1" }))

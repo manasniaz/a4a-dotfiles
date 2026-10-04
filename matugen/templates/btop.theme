@@ -1,5 +1,5 @@
 # Generated from the wallpaper by matugen. Do not edit: rewritten on every
-# wallpaper change. btop.conf points at ~/.cache/a4a/btop.theme.
+# wallpaper change. btop.conf names it (color_theme = "a4a").
 
 theme[main_bg]="{{colors.background.dark.hex}}"
 theme[main_fg]="{{colors.on_surface.dark.hex}}"

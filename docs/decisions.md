@@ -269,3 +269,16 @@ the reason behind something. The current rules are in CLAUDE.md.
   answers PIN requests with 0000 and rejects passkey typing. The island now calls `pair()` on
   unpaired devices (`connect()` can't work on them) and trusts a device once it's paired, so
   it reconnects after sleep.
+- Session 26: **btop and cava follow the wallpaper live, and workspaces match ML4W.**
+  - btop never got the wallpaper colours: btop 1.4.7 ignores an absolute path in
+    `color_theme` and only looks themes up by name. Now matugen writes
+    `~/.config/btop/themes/a4a.theme` (gitignored) and `btop.conf` says `color_theme = "a4a"`.
+    btop re-reads its theme on SIGUSR2 (tested on a pty: SIGUSR1 does not reload the
+    theme). cava re-reads its colours on SIGUSR2 (cava's README). Both signals are sent by
+    matugen's post hooks, with `|| true` for when they aren't running.
+  - Workspaces follow ML4W's defaults (read from its repo): SUPER+scroll steps through the
+    workspaces that exist (`e±1`), not empty ones. The Windows-style CTRL+arrows and the bar
+    wheel use `e±1` too, which replaces the earlier `r±1` (session 3). Reaching a far
+    workspace no longer means stepping: SUPER+G asks for a number (`scripts/a4a-workspace`,
+    wofi prompt), and SUPER+SHIFT+G sends the window there. Hyprland accepts any number as
+    a workspace id, so 98 works. The 1–10 keys stay as they are.

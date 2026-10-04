@@ -63,6 +63,7 @@ SCRIPTS=(
     a4a-palette
     a4a-greeter
     a4a-bt-agent
+    a4a-workspace
 )
 
 info() { printf '\033[1;34m::\033[0m %s\n' "$*"; }
