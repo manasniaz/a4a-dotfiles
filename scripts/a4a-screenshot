@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Screenshots that behave like the Windows snipping tool.
+#   a4a-screenshot region   drag a rectangle, then annotate in the editor (SUPER+SHIFT+S)
+#   a4a-screenshot full     whole screen, straight to the editor
+#
+# grim captures, slurp picks the region, satty is the editor (crop, arrows,
+# text, blur, highlight). Saved PNGs go to ~/Pictures/Screenshots and are copied
+# to the clipboard as well.
+set -euo pipefail
+
+DIR="$HOME/Pictures/Screenshots"
+mkdir -p "$DIR"
+OUT="$DIR/$(date +%Y%m%d-%H%M%S).png"
+
+case "${1:-}" in
+    region)
+        # Empty selection (Esc in slurp) means the user cancelled: do nothing.
+        geometry="$(slurp)" || exit 0
+        grim -g "$geometry" - | satty --filename - --output-filename "$OUT" --copy-command wl-copy --early-exit
+        ;;
+    full)
+        grim - | satty --filename - --output-filename "$OUT" --copy-command wl-copy --early-exit
+        ;;
+    *)
+        echo "usage: a4a-screenshot {region|full}" >&2
+        exit 2
+        ;;
+esac

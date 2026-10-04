@@ -1,0 +1,104 @@
+/* Generated from the wallpaper by matugen (same palette as the desktop). Installed to
+   /etc/greetd/gtkgreet.css by scripts/a4a-greeter. */
+@define-color window_bg_color {{colors.background.dark.hex}};
+@define-color window_fg_color {{colors.on_surface.dark.hex}};
+@define-color view_bg_color {{colors.surface_container.dark.hex}};
+@define-color view_fg_color {{colors.on_surface.dark.hex}};
+@define-color headerbar_bg_color {{colors.surface_container.dark.hex}};
+@define-color headerbar_fg_color {{colors.on_surface.dark.hex}};
+@define-color card_bg_color {{colors.surface_container_high.dark.hex}};
+@define-color card_fg_color {{colors.on_surface.dark.hex}};
+@define-color popover_bg_color {{colors.surface_container.dark.hex}};
+@define-color popover_fg_color {{colors.on_surface.dark.hex}};
+@define-color dialog_bg_color {{colors.surface_container.dark.hex}};
+@define-color dialog_fg_color {{colors.on_surface.dark.hex}};
+@define-color sidebar_bg_color {{colors.surface_container_low.dark.hex}};
+@define-color sidebar_fg_color {{colors.on_surface.dark.hex}};
+@define-color accent_color {{colors.primary.dark.hex}};
+@define-color accent_bg_color {{colors.primary.dark.hex}};
+@define-color accent_fg_color {{colors.on_primary.dark.hex}};
+@define-color destructive_color {{colors.error.dark.hex}};
+@define-color destructive_bg_color {{colors.error.dark.hex}};
+@define-color destructive_fg_color {{colors.on_error.dark.hex}};
+@define-color borders {{colors.outline_variant.dark.hex}};
+@define-color shade_color {{colors.shadow.dark.hex}};
+
+/* GTK 3 names for the same roles. */
+@define-color bg_color {{colors.background.dark.hex}};
+@define-color fg_color {{colors.on_surface.dark.hex}};
+@define-color base_color {{colors.surface_container.dark.hex}};
+@define-color text_color {{colors.on_surface.dark.hex}};
+@define-color selected_bg_color {{colors.primary.dark.hex}};
+@define-color selected_fg_color {{colors.on_primary.dark.hex}};
+@define-color tooltip_bg_color {{colors.surface_container_high.dark.hex}};
+@define-color tooltip_fg_color {{colors.on_surface.dark.hex}};
+
+/* Adwaita's own rules paint with the theme_* names. Setting them here is what makes
+   the palette show: a user stylesheet overrides the theme's definitions. */
+@define-color theme_bg_color {{colors.background.dark.hex}};
+@define-color theme_fg_color {{colors.on_surface.dark.hex}};
+@define-color theme_base_color {{colors.surface_container.dark.hex}};
+@define-color theme_text_color {{colors.on_surface.dark.hex}};
+@define-color theme_selected_bg_color {{colors.primary.dark.hex}};
+@define-color theme_selected_fg_color {{colors.on_primary.dark.hex}};
+@define-color theme_unfocused_bg_color {{colors.background.dark.hex}};
+@define-color theme_unfocused_fg_color {{colors.on_surface.dark.hex}};
+@define-color theme_unfocused_base_color {{colors.surface_container.dark.hex}};
+@define-color theme_unfocused_text_color {{colors.on_surface.dark.hex}};
+@define-color insensitive_bg_color {{colors.surface_container.dark.hex}};
+@define-color insensitive_fg_color {{colors.outline.dark.hex}};
+@define-color borders_color {{colors.outline_variant.dark.hex}};
+
+/* Rules, not only colour names: Adwaita paints many widgets with fixed colours, so
+   the palette has to be applied to the widgets themselves. */
+window, .background, dialog, .view-window {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+}
+headerbar, .titlebar, .toolbar, toolbar {
+    background-image: none;
+    background-color: @headerbar_bg_color;
+    color: @headerbar_fg_color;
+    border-color: @borders;
+    box-shadow: none;
+}
+.view, treeview, iconview, text, entry, .entry, textview text, list, listbox, row {
+    background-color: @view_bg_color;
+    color: @view_fg_color;
+}
+treeview:selected, iconview:selected, row:selected, .view:selected, selection,
+.view:selected:focus, entry selection {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+button, .button, combobox button, menubutton button {
+    background-image: none;
+    background-color: @card_bg_color;
+    color: @window_fg_color;
+    border-color: @borders;
+    box-shadow: none;
+    text-shadow: none;
+}
+button:hover, .button:hover {
+    background-color: alpha(@accent_color, 0.18);
+    color: @window_fg_color;
+}
+button:active, .button:active, button:checked {
+    background-color: alpha(@accent_color, 0.3);
+    color: @window_fg_color;
+}
+menu, .menu, menubar, .menubar, popover, .popover, popover.background,
+.menu > menuitem, menuitem {
+    background-color: @popover_bg_color;
+    color: @popover_fg_color;
+    border-color: @borders;
+}
+menuitem:hover, .menu > menuitem:hover {
+    background-color: alpha(@accent_color, 0.18);
+    color: @popover_fg_color;
+}
+tooltip, .tooltip {
+    background-color: @tooltip_bg_color;
+    color: @tooltip_fg_color;
+    border-color: @borders;
+}

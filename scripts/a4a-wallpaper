@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Sets the wallpaper and regenerates the whole palette from it.
+#   a4a-wallpaper set <image>   change wallpaper, remember it, re-theme
+#   a4a-wallpaper restore       re-apply the remembered wallpaper (run at login)
+#   a4a-wallpaper list          thumbnails of the folder, for the island picker
+#   a4a-wallpaper random        set a random image from the folder
+set -euo pipefail
+
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/a4a/wallpaper"
+DEFAULT="$HOME/Pictures/wallpaper.jpg"
+# The picker's folder. Per machine: change it here, and nothing else needs to move.
+FOLDER="$HOME/Pictures/Wallpapers"
+THUMBS="$HOME/.cache/a4a/thumbs"
+
+# The daemon is started just before this at login, so wait for it to answer.
+wait_for_daemon() {
+    for _ in $(seq 50); do
+        awww query &>/dev/null && return 0
+        sleep 0.1
+    done
+    echo "a4a-wallpaper: awww-daemon is not responding" >&2
+    return 1
+}
+
+# a4a-vibe sits next to this script in the repo; resolve through the symlink.
+VIBE="$(dirname "$(readlink -f "$0")")/a4a-vibe"
+
+apply() {
+    local img="$1"
+    [[ -f "$img" ]] || { echo "a4a-wallpaper: not a file: $img" >&2; exit 1; }
+    wait_for_daemon
+    awww img "$img"
+    # matugen's own pick is the single most saturated pixel, which is often a
+    # small highlight. a4a-vibe picks the colour that covers the most of the
+    # scene instead, and matugen builds the palette from that.
+    matugen color hex "$("$VIBE" "$img")" --mode dark --quiet
+    # The lock screen reads one fixed file, so it gets a PNG copy of the wallpaper
+    # (any input format). Made here, not at lock time, so locking stays instant.
+    mkdir -p "$HOME/.cache/a4a"
+    ffmpeg -loglevel error -y -i "$img" -frames:v 1 -vf "scale=2560:-2" "$HOME/.cache/a4a/lock.png"
+}
+
+# Every image in the folder, one per line, sorted by name.
+images() {
+    [[ -d "$FOLDER" ]] || return 0
+    find "$FOLDER" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | sort
+}
+
+# A small JPEG per image, named by path and modification time, so an edited
+# image gets a fresh thumbnail. Made once, then reused.
+thumb_for() {
+    local img="$1" key
+    key="$(printf '%s\n%s' "$img" "$(stat -c %Y "$img")" | sha1sum | cut -c1-16)"
+    printf '%s/%s.jpg' "$THUMBS" "$key"
+}
+
+list() {
+    mkdir -p "$THUMBS"
+    local img thumb
+    while IFS= read -r img; do
+        thumb="$(thumb_for "$img")"
+        if [[ ! -f "$thumb" ]]; then
+            ffmpeg -loglevel error -nostdin -y -i "$img" -frames:v 1 -vf "scale=320:-2" "$thumb" \
+                || continue
+        fi
+        printf '%s\t%s\n' "$thumb" "$img"
+    done < <(images)
+}
+
+case "${1:-}" in
+    random)
+        # Any image but the current one, so the key always changes something.
+        current="$(cat "$STATE" 2>/dev/null || true)"
+        img="$(images | grep -vxF "$current" | shuf -n1 || true)"
+        [[ -n "$img" ]] || { echo "a4a-wallpaper: no other images in $FOLDER" >&2; exit 1; }
+        apply "$img"
+        mkdir -p "$(dirname "$STATE")"
+        printf '%s\n' "$img" > "$STATE"
+        ;;
+    list)
+        list
+        ;;
+    set)
+        [[ -n "${2:-}" ]] || { echo "usage: a4a-wallpaper set <image>" >&2; exit 2; }
+        img="$(realpath "$2")"
+        apply "$img"
+        mkdir -p "$(dirname "$STATE")"
+        printf '%s\n' "$img" > "$STATE"
+        ;;
+    restore)
+        if [[ -f "$STATE" ]]; then img="$(cat "$STATE")"; else img="$DEFAULT"; fi
+        apply "$img"
+        ;;
+    *)
+        echo "usage: a4a-wallpaper {set <image>|restore|list|random}" >&2
+        exit 2
+        ;;
+esac

@@ -1,0 +1,12 @@
+# greetd: the login screen. Installed to /etc/greetd/config.toml by scripts/a4a-greeter.
+# cage is a minimal Wayland compositor that runs one program full screen. gtkgreet is
+# a Wayland client, so it needs cage (or another compositor) around it: without one it
+# exits at once, which is what broke the first attempt. gtkgreet starts start-hyprland
+# after a successful login. -l (layer shell) is left out: cage doesn't support it.
+
+[terminal]
+vt = 1
+
+[default_session]
+command = "cage -s -- gtkgreet -c start-hyprland -s /etc/greetd/gtkgreet.css -b /etc/greetd/wallpaper.png"
+user = "greeter"

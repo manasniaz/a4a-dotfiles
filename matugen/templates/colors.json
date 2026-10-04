@@ -1,0 +1,7 @@
+{
+    "bg": "{{colors.background.dark.hex}}",
+    "surface": "{{colors.surface_container.dark.hex}}",
+    "muted": "{{colors.outline_variant.dark.hex}}",
+    "fg": "{{colors.on_surface.dark.hex}}",
+    "accent": "{{colors.primary.dark.hex}}"
+}

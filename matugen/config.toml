@@ -1,0 +1,82 @@
+# matugen generates the palette from the wallpaper. Run by scripts/a4a-wallpaper.
+# Each template renders one file; the generated files are cache, not repo state.
+
+[config]
+
+[templates.hypr_colors]
+input_path = "~/.config/matugen/templates/colors.lua"
+output_path = "~/.cache/a4a/colors.lua"
+post_hook = "hyprctl reload"
+
+# Quickshell reads this JSON and watches it, so the bar re-themes on its own.
+[templates.quickshell_colors]
+input_path = "~/.config/matugen/templates/colors.json"
+output_path = "~/.cache/a4a/colors.json"
+
+# Terminal tools, same palette. kitty reloads on SIGUSR1; cava and btop read
+# these files when they start.
+[templates.kitty_colors]
+input_path = "~/.config/matugen/templates/kitty-colors.conf"
+output_path = "~/.cache/a4a/kitty-colors.conf"
+post_hook = "pkill -USR1 -x kitty || true"
+
+[templates.cava_conf]
+input_path = "~/.config/matugen/templates/cava.conf"
+# cava's own config file, so a plain `cava` picks up the wallpaper colours.
+output_path = "~/.config/cava/config"
+
+# The lock screen's colours. hyprlock.conf sources the output.
+[templates.hyprlock_colors]
+input_path = "~/.config/matugen/templates/hyprlock-colors.conf"
+output_path = "~/.cache/a4a/hyprlock-colors.conf"
+
+# Notifications. dunst's own config file, so it reads it at start; the reload
+# applies a new palette to notifications already on screen. `|| true`: dunst
+# isn't running on a fresh render, and that is not an error.
+[templates.dunst_conf]
+input_path = "~/.config/matugen/templates/dunstrc"
+output_path = "~/.config/dunst/dunstrc"
+post_hook = "dunstctl reload || true"
+
+# The system info tool's config: generated, so it isn't a repo folder either.
+[templates.fastfetch_conf]
+input_path = "~/.config/matugen/templates/fastfetch.jsonc"
+output_path = "~/.config/fastfetch/config.jsonc"
+
+# The shell's colours (autosuggestions, syntax highlighting) and the prompt.
+[templates.zsh_colors]
+input_path = "~/.config/matugen/templates/zsh-colors.zsh"
+output_path = "~/.cache/a4a/zsh-colors.zsh"
+
+[templates.starship_conf]
+input_path = "~/.config/matugen/templates/starship.toml"
+output_path = "~/.config/starship.toml"
+
+# The launcher and clipboard picker (wofi). Both files are generated, so there is no
+# repo folder for them either.
+[templates.wofi_config]
+input_path = "~/.config/matugen/templates/wofi-config"
+output_path = "~/.config/wofi/config"
+
+[templates.wofi_style]
+input_path = "~/.config/matugen/templates/wofi-style.css"
+output_path = "~/.config/wofi/style.css"
+
+# GTK 3 apps. GTK 4 doesn't read user stylesheets in this version, so GTK 4 apps get
+# the dark colour scheme instead (set at login in hypr/autostart.lua).
+[templates.gtk3_css]
+input_path = "~/.config/matugen/templates/gtk.css"
+output_path = "~/.config/gtk-3.0/gtk.css"
+
+[templates.gtk3_settings]
+input_path = "~/.config/matugen/templates/gtk-settings.ini"
+output_path = "~/.config/gtk-3.0/settings.ini"
+
+# The login screen (greetd + gtkgreet) uses the same stylesheet. scripts/a4a-greeter copies it to /etc.
+[templates.gtkgreet_css]
+input_path = "~/.config/matugen/templates/gtkgreet.css"
+output_path = "~/.cache/a4a/gtkgreet.css"
+
+[templates.btop_theme]
+input_path = "~/.config/matugen/templates/btop.theme"
+output_path = "~/.cache/a4a/btop.theme"

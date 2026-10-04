@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Copies the login screen's files into /etc/greetd: the config, the palette stylesheet
+# and the current wallpaper. Run it after changing the wallpaper, then restart greetd.
+# It doesn't enable greetd: that is a separate, deliberate step (see system/README.md).
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+CACHE="$HOME/.cache/a4a"
+
+[[ -f "$CACHE/gtkgreet.css" && -f "$CACHE/lock.png" ]] || {
+    echo "a4a-greeter: run a4a-wallpaper first (it makes the palette and the wallpaper)." >&2
+    exit 1
+}
+
+sudo install -d -m755 /etc/greetd
+sudo install -m644 "$REPO/system/greetd/config.toml" /etc/greetd/config.toml
+sudo install -m644 "$CACHE/gtkgreet.css" /etc/greetd/gtkgreet.css
+sudo install -m644 "$CACHE/lock.png" /etc/greetd/wallpaper.png
+echo "a4a-greeter: installed. Enable it with: see system/README.md"

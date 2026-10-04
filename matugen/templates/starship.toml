@@ -1,0 +1,43 @@
+# Generated from the wallpaper by matugen. Do not edit: rewritten on every
+# wallpaper change. Starship's own config (~/.config/starship.toml).
+# One line of prompt: the folder, the git state, how long the last command took,
+# and the arrow. Colours are the palette's roles.
+
+palette = "a4a"
+
+add_newline = false
+format = "$directory$git_branch$git_status$cmd_duration$line_break$character"
+
+[directory]
+style = "bold accent"
+truncation_length = 3
+truncate_to_repo = true
+
+[git_branch]
+symbol = " "
+style = "tertiary"
+
+[git_status]
+style = "error"
+
+[cmd_duration]
+min_time = 2000
+style = "muted"
+format = "[$duration]($style) "
+
+[character]
+success_symbol = "[❯](accent)"
+error_symbol = "[❯](error)"
+
+[username]
+show_always = false
+
+[hostname]
+disabled = true
+
+# Tables after this line belong to the palette, so it stays last.
+[palettes.a4a]
+accent = "{{colors.primary.dark.hex}}"
+tertiary = "{{colors.tertiary.dark.hex}}"
+error = "{{colors.error.dark.hex}}"
+muted = "{{colors.outline.dark.hex}}"

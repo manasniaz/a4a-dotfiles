@@ -1,0 +1,54 @@
+# Generated from the wallpaper by matugen. Do not edit: rewritten on every
+# wallpaper change. This is dunst's own config (~/.config/dunst/dunstrc), and
+# matugen runs `dunstctl reload` after each write, so the colours update live.
+
+[global]
+    follow = keyboard
+    width = 360
+    # (0, X): grows with the text up to X, the same as the old single-value height.
+    height = (0, 160)
+    notification_limit = 4
+    origin = top-right
+    # Below the bar: its pill ends at 38px (4px edge + 34px pill), then the same
+    # 6px gap the windows keep (gaps_out in hypr/look.lua), plus a little air.
+    offset = (12, 50)
+    gap_size = 8
+    corner_radius = 10
+    frame_width = 1
+    padding = 14
+    horizontal_padding = 16
+    separator_height = 1
+    separator_color = frame
+    font = JetBrainsMono Nerd Font 10
+    format = "<b>%s</b>\n%b"
+    markup = full
+    alignment = left
+    icon_position = left
+    max_icon_size = 48
+    # Layer above windows and fullscreen, so a notification never hides behind one.
+    layer = overlay
+    mouse_left_click = close_current
+    mouse_right_click = do_action, close_current
+    background = "{{colors.surface_container.dark.hex}}"
+    foreground = "{{colors.on_surface.dark.hex}}"
+    frame_color = "{{colors.outline_variant.dark.hex}}"
+
+# Low and normal fade on their own. Critical stays until it is clicked away,
+# and gets the error colour so it can't be mistaken for a normal popup.
+[urgency_low]
+    timeout = 5
+    background = "{{colors.surface_container.dark.hex}}"
+    foreground = "{{colors.on_surface_variant.dark.hex}}"
+    frame_color = "{{colors.outline_variant.dark.hex}}"
+
+[urgency_normal]
+    timeout = 8
+    background = "{{colors.surface_container.dark.hex}}"
+    foreground = "{{colors.on_surface.dark.hex}}"
+    frame_color = "{{colors.primary.dark.hex}}"
+
+[urgency_critical]
+    timeout = 0
+    background = "{{colors.surface_container.dark.hex}}"
+    foreground = "{{colors.on_surface.dark.hex}}"
+    frame_color = "{{colors.error.dark.hex}}"

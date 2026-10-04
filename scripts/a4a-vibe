@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Print the colour that best represents a whole image, as #rrggbb.
+
+matugen takes one source colour. Its default pick is the single most saturated
+pixel, so a small bright spot (a sunset streak, a red button) can set the whole
+theme. This instead clusters a small copy of the image and picks the cluster
+that covers the most area while still being colourful. Area matters, so the
+colour of the scene wins over the colour of a small highlight.
+
+Uses only the standard library and ffmpeg (for decoding the image).
+"""
+import colorsys
+import random
+import subprocess
+import sys
+
+FALLBACK = "#8aa1b1"  # same fallback as matugen and hypr/colors.lua
+SIZE = (64, 36)       # enough detail for the scene, cheap to cluster
+CLUSTERS = 6
+MIN_CHROMA = 12       # below this, the image is effectively greyscale
+
+
+def load_pixels(path):
+    w, h = SIZE
+    raw = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-i", path,
+         "-vf", f"scale={w}:{h}:flags=area",
+         "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    return [tuple(raw[i:i + 3]) for i in range(0, len(raw), 3)]
+
+
+def kmeans(pixels, k, iterations=20):
+    # Fixed seed so the same image always gives the same palette.
+    rng = random.Random(1)
+    centres = rng.sample(pixels, k)
+    groups = [[] for _ in range(k)]
+    for _ in range(iterations):
+        groups = [[] for _ in range(k)]
+        for p in pixels:
+            nearest = min(range(k), key=lambda c: sum((a - b) ** 2 for a, b in zip(p, centres[c])))
+            groups[nearest].append(p)
+        centres = [
+            tuple(sum(ch) / len(g) for ch in zip(*g)) if g else centres[i]
+            for i, g in enumerate(groups)
+        ]
+    return centres, groups
+
+
+def pick(path):
+    pixels = load_pixels(path)
+    centres, groups = kmeans(pixels, CLUSTERS)
+    best, best_score = None, 0.0
+    for centre, group in zip(centres, groups):
+        share = len(group) / len(pixels)
+        chroma = max(centre) - min(centre)
+        if chroma < MIN_CHROMA:
+            continue  # greys and near-whites carry no colour
+        score = share * chroma
+        if score > best_score:
+            best, best_score = centre, score
+    if best is None:
+        return FALLBACK
+    # Keep the cluster's hue and saturation, but cap how bright it is so the
+    # colour still works as an accent on a dark background.
+    h, s, v = colorsys.rgb_to_hsv(*(c / 255 for c in best))
+    r, g, b = colorsys.hsv_to_rgb(h, s, min(v, 0.75))
+    return "#%02x%02x%02x" % tuple(round(c * 255) for c in (r, g, b))
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("usage: a4a-vibe <image>", file=sys.stderr)
+        sys.exit(2)
+    print(pick(sys.argv[1]))

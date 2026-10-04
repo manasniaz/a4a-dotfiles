@@ -1,0 +1,38 @@
+{
+  // Generated from the wallpaper by matugen. Do not edit: rewritten on every
+  // wallpaper change. fastfetch reads it from ~/.config/fastfetch/config.jsonc.
+  // Few lines, one accent colour from the palette, no colour blocks.
+  "logo": {
+    "source": "arch_small",
+    "color": { "1": "{{colors.primary.dark.hex}}" },
+    "padding": { "top": 1, "left": 2, "right": 3 }
+  },
+  "display": {
+    "separator": "  ",
+    "color": {
+      "keys": "{{colors.primary.dark.hex}}",
+      "output": "{{colors.on_surface.dark.hex}}",
+      "title": "{{colors.primary.dark.hex}}",
+      "separator": "{{colors.outline_variant.dark.hex}}"
+    },
+    "key": { "width": 9 },
+    "constants": []
+  },
+  "modules": [
+    {
+      "type": "title",
+      "color": {
+        "user": "{{colors.on_surface.dark.hex}}",
+        "at": "{{colors.outline_variant.dark.hex}}",
+        "host": "{{colors.primary.dark.hex}}"
+      }
+    },
+    "separator",
+    { "type": "os", "key": "OS" },
+    { "type": "uptime", "key": "Up" },
+    { "type": "wm", "key": "WM" },
+    { "type": "shell", "key": "Shell" },
+    { "type": "memory", "key": "RAM" },
+    { "type": "battery", "key": "Battery" }
+  ]
+}

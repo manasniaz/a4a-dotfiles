@@ -1,0 +1,2 @@
+# Linked to ~/.zshenv by install.sh. Points zsh at the config folder in ~/.config.
+export ZDOTDIR="$HOME/.config/zsh"

@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Show the wallpaper palette in the terminal: the ANSI colours and the main roles,
+with their hex values. Reads the file matugen writes for kitty, so it always
+matches what the terminal is using.
+"""
+import os
+import re
+import sys
+
+SOURCE = os.path.expanduser("~/.cache/a4a/kitty-colors.conf")
+
+
+def load(path):
+    colours = {}
+    for line in open(path):
+        m = re.match(r"^(\w+)\s+#([0-9a-fA-F]{6})\s*$", line)
+        if m:
+            colours[m.group(1)] = "#" + m.group(2).lower()
+    return colours
+
+
+def swatch(hex_value, label):
+    r, g, b = (int(hex_value[i:i + 2], 16) for i in (1, 3, 5))
+    return f"\x1b[48;2;{r};{g};{b}m      \x1b[0m {label:<8} {hex_value}"
+
+
+def main():
+    if not os.path.exists(SOURCE):
+        print("a4a-palette: no palette yet. Run a4a-wallpaper first.", file=sys.stderr)
+        return 1
+    c = load(SOURCE)
+
+    print("\x1b[1mANSI\x1b[0m")
+    for row in (range(0, 8), range(8, 16)):
+        for i in row:
+            print(swatch(c[f"color{i}"], f"color{i}"))
+        print()
+
+    print("\x1b[1mRoles\x1b[0m")
+    for key in ("background", "foreground", "cursor", "url_color", "active_border_color"):
+        if key in c:
+            print(swatch(c[key], key))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
