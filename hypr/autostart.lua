@@ -13,6 +13,8 @@ local programs = {
     "quickshell",
     -- Notifications. It reads the palette file on start, like the bar.
     "dunst",
+    -- Answers BlueZ pairing requests (keyboards, mice). Without it pairing fails.
+    os.getenv("HOME") .. "/.local/bin/a4a-bt-agent",
     -- GTK 4 apps follow the desktop's colour scheme; the palette is dark.
     "gsettings set org.gnome.desktop.interface color-scheme prefer-dark",
     -- Night light. Starts with no filter; the bar's NightLight sets the right one.

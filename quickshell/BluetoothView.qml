@@ -52,12 +52,29 @@ ColumnLayout {
             radius: 10
             color: devMouse.containsMouse ? Qt.lighter(Theme.card, 1.15) : "transparent"
 
+            // Pairing first. connect() only works on a paired device.
+            // Trust lets BlueZ reconnect it by itself after sleep.
+            Connections {
+                target: entry.modelData
+                function onPairedChanged() {
+                    if (entry.modelData.paired)
+                        entry.modelData.trusted = true
+                }
+            }
+
             MouseArea {
                 id: devMouse
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: entry.modelData.connected ? entry.modelData.disconnect() : entry.modelData.connect()
+                onClicked: {
+                    if (entry.modelData.connected)
+                        entry.modelData.disconnect()
+                    else if (entry.modelData.paired)
+                        entry.modelData.connect()
+                    else if (!entry.modelData.pairing)
+                        entry.modelData.pair()
+                }
             }
 
             RowLayout {
@@ -75,7 +92,9 @@ ColumnLayout {
                 }
 
                 Text {
-                    text: entry.modelData.connected ? "connected" : (entry.modelData.paired ? "paired" : "nearby")
+                    text: entry.modelData.connected ? "connected"
+                        : entry.modelData.paired ? "paired"
+                        : entry.modelData.pairing ? "pairing…" : "nearby"
                     color: Theme.muted
                     font.pixelSize: 10
                 }

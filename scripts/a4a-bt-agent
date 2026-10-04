@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+# BlueZ pairing agent. bluetoothd asks an agent to confirm or type a passkey
+# when a device pairs. Quickshell can't answer those requests, so without this
+# agent keyboards and mice fail with "No agent available for request type 2".
+# Started at login. It re-registers when bluetoothd restarts.
+import subprocess
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+BUS = "org.bluez"
+AGENT_PATH = "/com/a4a/BluezAgent"
+# Most keyboards and mice that ask for a PIN use this one.
+DEFAULT_PIN = "0000"
+
+INTROSPECTION = """
+<node>
+  <interface name="org.bluez.Agent1">
+    <method name="Release"/>
+    <method name="RequestPinCode">
+      <arg name="device" type="o" direction="in"/>
+      <arg name="pincode" type="s" direction="out"/>
+    </method>
+    <method name="DisplayPinCode">
+      <arg name="device" type="o" direction="in"/>
+      <arg name="pincode" type="s" direction="in"/>
+    </method>
+    <method name="RequestPasskey">
+      <arg name="device" type="o" direction="in"/>
+      <arg name="passkey" type="u" direction="out"/>
+    </method>
+    <method name="DisplayPasskey">
+      <arg name="device" type="o" direction="in"/>
+      <arg name="passkey" type="u" direction="in"/>
+      <arg name="entered" type="q" direction="in"/>
+    </method>
+    <method name="RequestConfirmation">
+      <arg name="device" type="o" direction="in"/>
+      <arg name="passkey" type="u" direction="in"/>
+    </method>
+    <method name="RequestAuthorization">
+      <arg name="device" type="o" direction="in"/>
+    </method>
+    <method name="AuthorizeService">
+      <arg name="device" type="o" direction="in"/>
+      <arg name="uuid" type="s" direction="in"/>
+    </method>
+    <method name="Cancel"/>
+  </interface>
+</node>
+"""
+
+
+def notify(title, body):
+    subprocess.Popen(["notify-send", "-a", "Bluetooth", title, body])
+
+
+def device_name(conn, path):
+    try:
+        alias = conn.call_sync(
+            BUS, path, "org.freedesktop.DBus.Properties", "Get",
+            GLib.Variant("(ss)", ("org.bluez.Device1", "Alias")),
+            GLib.VariantType("(v)"), Gio.DBusCallFlags.NONE, 2000, None,
+        )
+        return alias.unpack()[0].unpack()
+    except GLib.Error:
+        return path
+
+
+def on_call(conn, sender, path, iface, method, params, invocation):
+    dev = params.unpack()[0] if method != "Cancel" and method != "Release" else None
+    name = device_name(conn, dev) if dev else ""
+
+    if method == "RequestPinCode":
+        invocation.return_value(GLib.Variant("(s)", (DEFAULT_PIN,)))
+    elif method == "DisplayPinCode":
+        notify("Pairing " + name, "Type PIN " + params.unpack()[1] + " on the device.")
+        invocation.return_value(None)
+    elif method == "RequestPasskey":
+        # Needs typing on the host, which the agent can't ask for. Reject so
+        # the pairing stops with an error instead of hanging.
+        notify("Pairing " + name + " failed", "It asked for a passkey typed on this PC.")
+        invocation.return_dbus_error("org.bluez.Error.Rejected", "No passkey UI")
+    elif method == "DisplayPasskey":
+        passkey = params.unpack()[1]
+        notify("Pairing " + name, "Type %06d on the device, then press Enter." % passkey)
+        invocation.return_value(None)
+    elif method == "RequestConfirmation":
+        # Accepted without a prompt: the code is shown on the notification so
+        # it can be checked against the device.
+        passkey = params.unpack()[1]
+        notify("Pairing " + name, "Confirm code %06d matches the device." % passkey)
+        invocation.return_value(None)
+    elif method in ("RequestAuthorization", "AuthorizeService"):
+        invocation.return_value(None)
+    elif method in ("Cancel", "Release"):
+        invocation.return_value(None)
+    else:
+        invocation.return_dbus_error("org.bluez.Error.Rejected", "Unknown method")
+
+
+def register(conn):
+    try:
+        conn.call_sync(
+            BUS, "/org/bluez", "org.bluez.AgentManager1", "RegisterAgent",
+            GLib.Variant("(os)", (AGENT_PATH, "KeyboardDisplay")),
+            None, Gio.DBusCallFlags.NONE, 2000, None,
+        )
+        conn.call_sync(
+            BUS, "/org/bluez", "org.bluez.AgentManager1", "RequestDefaultAgent",
+            GLib.Variant("(o)", (AGENT_PATH,)),
+            None, Gio.DBusCallFlags.NONE, 2000, None,
+        )
+    except GLib.Error as err:
+        # Already registered (harmless) or bluetoothd not up yet.
+        print("a4a-bt-agent: register: " + err.message, flush=True)
+
+
+def main():
+    bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    info = Gio.DBusNodeInfo.new_for_xml(INTROSPECTION).interfaces[0]
+    bus.register_object(AGENT_PATH, info, on_call, None, None)
+
+    # bluetoothd sends NameOwnerChanged when it starts or restarts. Each time
+    # it comes back, the agent is registered again.
+    def on_owner(_c, _s, _p, _i, _sig, params):
+        _name, _old, new = params.unpack()
+        if new:
+            register(bus)
+
+    bus.signal_subscribe(
+        "org.freedesktop.DBus", "org.freedesktop.DBus", "NameOwnerChanged",
+        "/org/freedesktop/DBus", BUS, Gio.DBusSignalFlags.NONE, on_owner, None,
+    )
+    register(bus)
+    GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    main()

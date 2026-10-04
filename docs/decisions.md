@@ -261,3 +261,11 @@ the reason behind something. The current rules are in CLAUDE.md.
   below the fold. Scrolling was the other option; the user chose the taller island.
 - Session 24: **Qt theming removed** (QT_QPA_PLATFORMTHEME, plasma-integration, breeze, the
   KDE colour templates). The user doesn't use Qt or KDE apps.
+- Session 25: **a BlueZ pairing agent runs at login (`scripts/a4a-bt-agent`).** Keyboards and
+  mice failed to pair with "No agent available for request type 2": bluetoothd asks an agent
+  to confirm or type a code, and Quickshell has no agent API. The agent accepts confirmation
+  requests and shows the code in a notification, so it can be checked against the device. It
+  does not ask the user first, which weakens the check against a man-in-the-middle. It
+  answers PIN requests with 0000 and rejects passkey typing. The island now calls `pair()` on
+  unpaired devices (`connect()` can't work on them) and trusts a device once it's paired, so
+  it reconnects after sleep.
