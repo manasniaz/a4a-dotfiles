@@ -15,7 +15,6 @@ ColumnLayout {
 
     DetailHeader {
         title: "Clock"
-        backTo: "home"
     }
 
     Text {
@@ -31,7 +30,7 @@ ColumnLayout {
     Text {
         Layout.alignment: Qt.AlignHCenter
         text: Qt.formatDate(clock.date, "dddd, d MMMM yyyy")
-        color: Theme.muted
+        color: Theme.fgFaint
         font.pixelSize: 13
     }
 }

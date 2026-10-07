@@ -118,7 +118,8 @@ Singleton {
 
     Timer {
         interval: IslandState.open ? 1000 : 2000
-        running: root.pillUsesStats || IslandState.open
+        // Not while a fullscreen window hides the bar: nothing shows the numbers then.
+        running: (root.pillUsesStats && !FullscreenState.trueFullscreen) || IslandState.open
         repeat: true
         triggeredOnStart: true
         onTriggered: {

@@ -9,7 +9,6 @@ ColumnLayout {
 
     DetailHeader {
         title: "System"
-        backTo: "home"
     }
 
     Card {

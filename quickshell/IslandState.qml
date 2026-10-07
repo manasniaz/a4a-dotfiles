@@ -5,54 +5,101 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Mpris
 
-// Shared state for the centre island: whether it is open, which view it shows,
-// what the closed pill and the home view contain, and the media player it
-// controls. A singleton so the bar, the island, the outside-click catcher and
-// the IPC handler all see one value.
+// Shared state for the bar's two panels: whether one is open, which page it shows,
+// what the bar and each home page contain, and the media player the island controls.
+// A singleton so the bar, the panels, the outside-click catcher and the IPC handlers
+// all see one value.
+//
+// Every page opens from the pill it belongs to, so a click opens things where the
+// click was:
+//   centre  the island: the clock, calendar, media, notifications, wallpaper, capture
+//   status  the right pill, grown into the control centre: Wi-Fi, Bluetooth, sound,
+//           system, network, power, and Bluetooth pairing requests
+// Settings belongs to neither: it opens in whichever panel it was asked for from.
+// Only one panel is open at a time. Moving to a page that lives in the other panel
+// closes this one and opens that one, so a page is always in its one place.
 Singleton {
     id: root
 
     property bool open: false
-    // "home", "wifi", "bluetooth", "calendar", "clock", "media", "network", "sound",
-    // "system", "settings", "wallpaper", "power", "capture" or "notifications".
     property string view: "home"
-    // The power action waiting for a second click (see IslandPanel.qml).
+    // Which panel is showing: "centre" or "status". Follows the page (see owner()).
+    property string origin: "centre"
+    // The power action waiting for a second click (see PowerView.qml).
     property string armed: ""
-    // Height of the bar window including the open island, in logical pixels.
+    // Height of the bar window including an open panel, in logical pixels.
     readonly property int barSpan: 1100
 
-    // Everything the closed island can show, in display order.
+    readonly property var centreViews: ["home", "clock", "calendar", "media", "notifications", "wallpaper", "capture"]
+    readonly property var statusViews: ["control", "wifi", "bluetooth", "sound", "system", "network", "power", "pairing"]
+
+    // The panel a page lives in, or "" for one that goes wherever it's opened (Settings).
+    function owner(v) {
+        if (statusViews.indexOf(v) !== -1)
+            return "status"
+        if (centreViews.indexOf(v) !== -1)
+            return "centre"
+        return ""
+    }
+
+    // The front page of the panel that's showing; every back arrow leads here.
+    readonly property string home: origin === "status" ? "control" : "home"
+
+    // Pages are also set directly (`IslandState.view = "wifi"`), so the panel follows
+    // the page here rather than in each caller.
+    onViewChanged: {
+        const o = owner(view)
+        if (o !== "")
+            origin = o
+    }
+
+    // Everything the bar can show, in display order, and where each one sits:
+    //   left    beside the workspaces
+    //   centre  the closed island, the most glanced-at things (time first)
+    //   system  the right pill's quiet readings
+    //   status  the right pill's glyphs: network, Bluetooth, sound, battery
     readonly property var choices: [
-        { key: "time", label: "Time" },
-        { key: "date", label: "Date" },
-        { key: "track", label: "Track" },
-        { key: "cpu", label: "CPU" },
-        { key: "ram", label: "RAM" },
-        { key: "battery", label: "Battery" },
-        { key: "wifi", label: "Wi-Fi (icon and signal %)" },
-        { key: "bluetooth", label: "Bluetooth icon" },
-        { key: "download", label: "Download speed" },
-        { key: "upload", label: "Upload speed" },
-        { key: "volume", label: "Volume" }
+        { key: "title", label: "Window title", zone: "left" },
+        { key: "time", label: "Time", zone: "centre" },
+        { key: "date", label: "Date", zone: "centre" },
+        { key: "track", label: "Track", zone: "centre" },
+        { key: "cpu", label: "CPU", zone: "system" },
+        { key: "ram", label: "RAM", zone: "system" },
+        { key: "download", label: "Download speed", zone: "system" },
+        { key: "upload", label: "Upload speed", zone: "system" },
+        { key: "wifi", label: "Wi-Fi", zone: "status" },
+        { key: "bluetooth", label: "Bluetooth", zone: "status" },
+        { key: "volume", label: "Volume", zone: "status" },
+        { key: "battery", label: "Battery", zone: "status" }
     ]
 
-    // The sections the home view can show, in display order.
+    // The shown keys that sit in one zone, in display order.
+    function shownIn(zone) {
+        return choices.filter(c => c.zone === zone && shown.indexOf(c.key) !== -1).map(c => c.key)
+    }
+
+    // The cards each home page can show, in display order, and which home they're on.
     readonly property var sections: [
-        { key: "network", label: "Wi-Fi card" },
-        { key: "bluetooth", label: "Bluetooth card" },
-        { key: "media", label: "Media controls" },
-        { key: "apps", label: "Apps and clipboard" },
-        { key: "sound", label: "Sound card" },
-        { key: "brightness", label: "Brightness card" },
-        { key: "system", label: "CPU, RAM and battery" },
-        { key: "updates", label: "Updates card" },
+        { key: "media", label: "Media controls", panel: "centre" },
+        { key: "notifications", label: "Notifications", panel: "centre" },
+        { key: "apps", label: "Apps and clipboard", panel: "centre" },
+        { key: "network", label: "Wi-Fi and Bluetooth", panel: "status" },
+        { key: "toggles", label: "Night light, Do not disturb", panel: "status" },
+        { key: "sound", label: "Sound", panel: "status" },
+        { key: "brightness", label: "Brightness", panel: "status" },
+        { key: "mode", label: "Power mode", panel: "status" },
+        { key: "system", label: "CPU, RAM and battery", panel: "status" },
+        { key: "updates", label: "Updates", panel: "status" }
     ]
 
-    // Which of the closed-pill choices are on. Empty is allowed: the pill then
-    // shows only the Arch mark and its name.
-    property var shown: ["time"]
-    // Which home sections are on.
-    property var panel: ["network", "bluetooth", "media", "sound", "brightness", "apps", "updates"]
+    // Which of the bar's choices are on. Empty is allowed: the island then shows
+    // only the Arch mark and its name.
+    property var shown: ["title", "time", "date", "track", "cpu", "ram", "wifi", "bluetooth", "volume", "battery"]
+    // Which home cards are on.
+    property var panel: ["media", "notifications", "apps", "network", "toggles", "sound", "brightness", "mode", "updates"]
+    // 2: the bar split into zones. 3: the two home pages, with new cards. Older saved
+    // choices get the new defaults added once.
+    readonly property int settingsVersion: 3
 
     // The player the island controls: the one playing, else the first one.
     readonly property var player: {
@@ -72,7 +119,7 @@ Singleton {
 
     readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/a4a"
 
-    // Run a command and close the island.
+    // Run a command and close the panel.
     function run(cmd) {
         Quickshell.execDetached(cmd)
         close()
@@ -85,22 +132,38 @@ Singleton {
         armed = ""
     }
 
-    // Open the island on a particular screen, from a click on the closed pill.
+    // Open on one page, in the panel that page belongs to.
     function openTo(v) {
         view = v
         armed = ""
         open = true
     }
 
-    // Opening always starts on the home view, wherever it was closed from.
+    // The island's own key (SUPER+I, the Arch mark): opens on the island's home, or
+    // closes it. Closes the control centre too, so one key always gets back to nothing.
     function toggle() {
-        if (open) {
+        if (open)
             close()
-        } else {
-            view = "home"
-            armed = ""
-            open = true
-        }
+        else
+            openTo("home")
+    }
+
+    // For keys that go to one page (SUPER+A, SUPER+N, SUPER+W, SUPER+X). Pressed
+    // again on that page, it closes. A home key (SUPER+A) closes its panel from any of
+    // its pages. Otherwise it goes to the page, moving panels if it has to.
+    function toggleTo(v) {
+        const o = owner(v) || origin
+        const isHome = v === "home" || v === "control"
+        if (open && (view === v || (isHome && origin === o)))
+            close()
+        else
+            openTo(v)
+    }
+
+    // Back arrow, Backspace: the home of the panel that's showing.
+    function back() {
+        view = home
+        armed = ""
     }
 
     function isShown(key) {
@@ -125,7 +188,7 @@ Singleton {
     }
 
     function save() {
-        store.setText(JSON.stringify({ shown: shown, panel: panel }))
+        store.setText(JSON.stringify({ version: settingsVersion, shown: shown, panel: panel }))
     }
 
     Timer {
@@ -141,12 +204,24 @@ Singleton {
         onLoaded: {
             try {
                 const data = JSON.parse(store.text())
-                if (Array.isArray(data.shown))
+                const version = data.version ?? 1
+                if (Array.isArray(data.shown)) {
                     // "wifi_strength" was a separate option from the icon; both are now one.
-                    root.shown = data.shown.map(k => k === "wifi_strength" ? "wifi" : k)
-                                           .filter((k, i, all) => all.indexOf(k) === i)
-                if (Array.isArray(data.panel))
-                    root.panel = data.panel
+                    let keys = data.shown.map(k => k === "wifi_strength" ? "wifi" : k)
+                    if (version < 2)
+                        keys = keys.concat(["title", "time", "date", "track", "wifi", "bluetooth", "volume", "battery"])
+                    const known = root.choices.map(c => c.key)
+                    root.shown = known.filter(k => keys.indexOf(k) !== -1)
+                }
+                if (Array.isArray(data.panel)) {
+                    let keys = data.panel
+                    if (version < 3)
+                        keys = keys.concat(["notifications", "toggles", "mode"])
+                    // Unknown keys (old cards that have gone) are dropped.
+                    root.panel = root.sections.map(s => s.key).filter(k => keys.indexOf(k) !== -1)
+                }
+                if (version < root.settingsVersion)
+                    root.save()
             } catch (e) {
                 // A missing or damaged file just means the defaults.
             }

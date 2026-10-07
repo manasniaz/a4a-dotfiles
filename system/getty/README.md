@@ -1,6 +1,6 @@
 # Autologin fallback (getty@tty1)
 
-`autologin-override.conf` is the working autologin setup: getty logs YOUR_USER in on tty1
+`autologin-override.conf` is the working autologin setup: getty logs `YOUR_USER` in on tty1
 without a password, then `zsh/.zprofile` starts Hyprland. It's the fallback for the
 greetd login screen (see `system/greetd/README.md`).
 

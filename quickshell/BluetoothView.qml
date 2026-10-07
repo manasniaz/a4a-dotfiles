@@ -2,31 +2,52 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell.Bluetooth
 
-// Bluetooth detail: the adapter switch, then the devices it knows. Click a device
-// to connect or disconnect it. Scanning runs only while this view is open. The
-// island's panel scrolls this, so the list is a plain column.
+// Bluetooth: the adapter switch, your devices, then devices nearby. A click on one
+// of yours connects or disconnects it; a click on a nearby one pairs it. If the
+// device needs a code confirmed, the pairing card takes over this panel (the agent,
+// scripts/a4a-bt-agent, asks), then comes back here. Paired devices are trusted by
+// the agent, so they reconnect by themselves. Scanning runs only while this page is
+// open. The panel scrolls this, so the lists are plain columns.
 ColumnLayout {
     id: root
 
     spacing: 10
 
     readonly property var adapter: Bluetooth.defaultAdapter
-    readonly property var devices: adapter && adapter.enabled ? adapter.devices.values : []
+    readonly property bool on: adapter !== null && adapter.enabled
+    readonly property var devices: on ? adapter.devices.values : []
+    readonly property var mine: devices.filter(d => d.paired)
+        .sort((a, b) => (b.connected - a.connected) || a.name.localeCompare(b.name))
+    // Beacons and nameless things only show their address; they aren't pairable in
+    // any useful way, so they're left out.
+    readonly property var nearby: devices.filter(d => !d.paired && d.deviceName !== "" && d.name !== d.address.replace(/:/g, "-"))
 
-    // Look for nearby devices while this view is on screen.
+    // Look for nearby devices while this page is on screen.
     Binding {
         target: root.adapter
         property: "discovering"
         value: true
-        when: IslandState.view === "bluetooth" && root.adapter !== null && root.adapter.enabled
+        when: IslandState.view === "bluetooth" && root.on
+    }
+
+    // A device's kind, from the icon name BlueZ gives it.
+    function glyph(d) {
+        const i = d.icon || ""
+        if (i.includes("mouse")) return "dev-mouse"
+        if (i.includes("keyboard")) return "dev-keyboard"
+        if (i.includes("headset") || i.includes("headphone")) return "dev-headphones"
+        if (i.includes("phone")) return "dev-phone"
+        if (i.includes("gaming") || i.includes("joystick")) return "dev-gamepad"
+        if (i.includes("computer")) return "dev-computer"
+        if (i.includes("audio") || i.includes("speaker")) return "dev-speaker"
+        return "bluetooth"
     }
 
     DetailHeader {
         title: "Bluetooth"
-        backTo: "home"
 
         Switch {
-            checked: root.adapter !== null && root.adapter.enabled
+            checked: root.on
             visible: root.adapter !== null
             onToggled: root.adapter.enabled = !root.adapter.enabled
         }
@@ -34,78 +55,141 @@ ColumnLayout {
 
     Text {
         Layout.fillWidth: true
-        text: !root.adapter ? "No Bluetooth adapter found"
-            : (!root.adapter.enabled ? "Bluetooth is off" : "Devices")
-        color: Theme.muted
+        visible: !root.on
+        text: !root.adapter ? "No Bluetooth adapter found" : "Bluetooth is off"
+        color: Theme.fgFaint
         font.pixelSize: 11
     }
 
-    Repeater {
-        model: root.devices
+    // One device row; used in both lists.
+    component DeviceRow: Rectangle {
+        id: row
+        required property var modelData
+        readonly property var dev: modelData
+        readonly property bool busy: dev.pairing || dev.state === BluetoothDeviceState.Connecting
+            || dev.state === BluetoothDeviceState.Disconnecting
 
-        Rectangle {
-            id: entry
-            required property var modelData
+        Layout.fillWidth: true
+        implicitHeight: 44
+        radius: 10
+        color: hover.hovered ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.06) : "transparent"
 
-            Layout.fillWidth: true
-            implicitHeight: 40
-            radius: 10
-            color: devMouse.containsMouse ? Qt.lighter(Theme.card, 1.15) : "transparent"
+        Behavior on color { ColorAnimation { duration: 120 } }
 
-            // Pairing first. connect() only works on a paired device.
-            // Trust lets BlueZ reconnect it by itself after sleep.
-            Connections {
-                target: entry.modelData
-                function onPairedChanged() {
-                    if (entry.modelData.paired)
-                        entry.modelData.trusted = true
-                }
+        HoverHandler {
+            id: hover
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                if (row.dev.connected)
+                    row.dev.disconnect()
+                else if (row.dev.paired)
+                    row.dev.connect()
+                else if (row.dev.pairing)
+                    row.dev.cancelPair()
+                else
+                    row.dev.pair()
+            }
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 8
+            spacing: 10
+
+            Icon {
+                kind: root.glyph(row.dev)
+                color: row.dev.connected ? Theme.accent : Theme.fg
+                font.pixelSize: 18
             }
 
-            MouseArea {
-                id: devMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if (entry.modelData.connected)
-                        entry.modelData.disconnect()
-                    else if (entry.modelData.paired)
-                        entry.modelData.connect()
-                    else if (!entry.modelData.pairing)
-                        entry.modelData.pair()
-                }
-            }
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                spacing: 8
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
 
                 Text {
                     Layout.fillWidth: true
                     elide: Text.ElideRight
-                    text: entry.modelData.name
-                    color: entry.modelData.connected ? Theme.accent : Theme.fg
+                    text: row.dev.name
+                    color: row.dev.connected ? Theme.accent : Theme.fg
                     font.pixelSize: 13
+                    font.weight: row.dev.connected ? Font.DemiBold : Font.Normal
                 }
 
                 Text {
-                    text: entry.modelData.connected ? "connected"
-                        : entry.modelData.paired ? "paired"
-                        : entry.modelData.pairing ? "pairing…" : "nearby"
-                    color: Theme.muted
+                    text: row.dev.pairing ? "Pairing… (click to stop)"
+                        : row.dev.state === BluetoothDeviceState.Connecting ? "Connecting…"
+                        : row.dev.state === BluetoothDeviceState.Disconnecting ? "Disconnecting…"
+                        : row.dev.connected ? "Connected"
+                        : row.dev.paired ? "Not connected" : "Click to pair"
+                    color: Theme.fgFaint
                     font.pixelSize: 10
                 }
+            }
+
+            Tile {
+                visible: row.dev.paired && hover.hovered && !row.busy
+                implicitHeight: 26
+                label: "Forget"
+                onActivated: row.dev.forget()
+            }
+
+            Text {
+                visible: row.dev.batteryAvailable
+                text: Math.round(row.dev.battery * 100) + "%"
+                color: Theme.fgFaint
+                font.pixelSize: 11
+                font.features: { "tnum": 1 }
             }
         }
     }
 
-    Text {
-        visible: root.devices.length === 0 && root.adapter !== null && root.adapter.enabled
-        text: "No devices yet. Put one in pairing mode."
-        color: Theme.muted
-        font.pixelSize: 12
+    Card {
+        visible: root.on
+        title: "My devices"
+
+        Text {
+            visible: root.mine.length === 0
+            text: "None paired yet."
+            color: Theme.fgFaint
+            font.pixelSize: 12
+        }
+
+        Repeater {
+            model: root.mine
+            delegate: DeviceRow {}
+        }
+    }
+
+    Card {
+        visible: root.on
+        title: root.nearby.length > 0 ? "Nearby" : "Nearby · looking…"
+
+        Text {
+            visible: root.nearby.length === 0
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: "Put the device in pairing mode (hold its Bluetooth or connect button until it blinks)."
+            color: Theme.fgFaint
+            font.pixelSize: 12
+        }
+
+        Repeater {
+            model: root.nearby
+            delegate: DeviceRow {}
+        }
+    }
+
+    // Phones and other computers only find this one while it's visible.
+    OptionRow {
+        visible: root.on
+        label: "Visible to other devices"
+        hint: "For pairing from a phone. Turns itself off after 3 minutes."
+        checked: root.adapter !== null && root.adapter.discoverable
+        onToggled: root.adapter.discoverable = !root.adapter.discoverable
     }
 }

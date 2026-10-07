@@ -7,7 +7,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 CACHE="$HOME/.cache/a4a"
 
-[[ -f "$CACHE/gtkgreet.css" && -f "$CACHE/lock.png" ]] || {
+[[ -f "$CACHE/gtkgreet.css" && -f "$CACHE/lock.jpg" ]] || {
     echo "a4a-greeter: run a4a-wallpaper first (it makes the palette and the wallpaper)." >&2
     exit 1
 }
@@ -15,5 +15,10 @@ CACHE="$HOME/.cache/a4a"
 sudo install -d -m755 /etc/greetd
 sudo install -m644 "$REPO/system/greetd/config.toml" /etc/greetd/config.toml
 sudo install -m644 "$CACHE/gtkgreet.css" /etc/greetd/gtkgreet.css
-sudo install -m644 "$CACHE/lock.png" /etc/greetd/wallpaper.png
+# The greeter's config names wallpaper.png, so the lock screen's JPEG is converted
+# rather than the login config changed.
+tmp="$(mktemp --suffix=.png)"
+ffmpeg -loglevel error -nostdin -y -i "$CACHE/lock.jpg" -frames:v 1 "$tmp"
+sudo install -m644 "$tmp" /etc/greetd/wallpaper.png
+rm -f "$tmp"
 echo "a4a-greeter: installed. Enable it with: see system/README.md"

@@ -7,17 +7,18 @@ RowLayout {
     id: root
 
     property string title
-    property string backTo: "home"
+    // Where the back arrow goes. Empty: the home of the panel that's showing.
+    property string backTo: ""
     default property alias extra: slot.data
 
     Layout.fillWidth: true
     spacing: 8
 
     Tile {
-        label: "←"
+        icon: "back"
         implicitWidth: 36
         implicitHeight: 32
-        onActivated: IslandState.view = root.backTo
+        onActivated: root.backTo !== "" ? IslandState.view = root.backTo : IslandState.back()
     }
 
     Text {
@@ -34,7 +35,7 @@ RowLayout {
     }
 
     Tile {
-        label: "✕"
+        icon: "close"
         implicitWidth: 36
         implicitHeight: 32
         onActivated: IslandState.close()

@@ -42,7 +42,7 @@ Rectangle {
             Layout.fillWidth: true
             text: root.status
             elide: Text.ElideRight
-            color: root.on ? Theme.accent : Theme.muted
+            color: root.on ? Theme.accent : Theme.fgFaint
             font.pixelSize: 11
         }
     }

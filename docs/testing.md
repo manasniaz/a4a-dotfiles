@@ -32,3 +32,24 @@ Start the daemon (needs sudo):
   capture, notifications.
 - Layers: `hyprctl layers | grep -c quickshell`.
 - Idle daemon: `hypridle -v -c ~/.config/hypridle/hypridle.conf` logs its rules.
+
+## Testing the new modules (session 27)
+
+- **Enterprise Wi-Fi:** `echo '<form-json>' | a4a-wifi-join --test` builds the 802.1X
+  settings and prints them with the password masked, without touching NetworkManager.
+  Add `--legacy` to see the legacy-TLS variant. A real attempt reads the same JSON on
+  stdin; watch `journalctl -u wpa_supplicant` (raise detail with
+  `sudo wpa_cli -i <dev> log_level DEBUG`) for the EAP/TLS trace. MSCHAPv2 error 691 =
+  wrong username/password; "unsupported protocol" = needs legacy TLS.
+- **Bluetooth pairing:** `a4a-bt-agent --test confirm|authorize|service|pin|passkey|display`
+  pops the real pairing card for a pretend device (no BlueZ), prints the answer BlueZ
+  would get. With no `quickshell` on PATH it uses the notification fallback instead.
+- **A throwaway MPRIS player** (for the track item / media card): a small GLib script
+  that owns `org.mpris.MediaPlayer2.a4atest` and reports a playing track. `playerctl -p
+  a4atest play-pause` drives it; kill it to test the empty state.
+- **Driving the pointer without root:** `hyprctl dispatch 'hl.dsp.cursor.move({ x=…, y=… })'`
+  moves the cursor for hover shots (no ydotoold needed). Clicks and typing still need
+  ydotool. Remember ydotool absolute coords are **half** the physical pixels.
+- **A component in isolation:** a tiny `shell.qml` that imports the repo through a
+  symlink (`import "a4a"`, with `a4a -> …/quickshell`) and shows one component in its own
+  `PanelWindow`, run with `quickshell -p <that file>`. Absolute import paths are rejected.

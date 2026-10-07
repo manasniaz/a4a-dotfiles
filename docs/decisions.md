@@ -282,3 +282,46 @@ the reason behind something. The current rules are in CLAUDE.md.
     workspace no longer means stepping: SUPER+G asks for a number (`scripts/a4a-workspace`,
     wofi prompt), and SUPER+SHIFT+G sends the window there. Hyprland accepts any number as
     a workspace id, so 98 works. The 1–10 keys stay as they are.
+
+- Session 27 (2026-10-07): **quality pass — bar/island rebuild, enterprise Wi-Fi,
+  Bluetooth pairing popup, keybinds, lock-wallpaper sync.** Studied snes19xx/surface-dots
+  for layout ideas (information hierarchy: time/workspace loud, CPU/RAM quiet; one hover
+  tint everywhere; depth from a hairline + soft shadow). Nothing copied; all written fresh.
+  - **Bar hierarchy.** Clock is the loudest text; date and track dim; CPU/RAM small and
+    quiet, turning accent only above 85%; battery accent at/below 20%. Wi-Fi is arcs
+    (`WifiGlyph`), not the font's triangle-like glyph. Window title sits by the workspaces.
+    Fixed-width digits so nothing jiggles. One `Hover` tint for every clickable thing.
+  - **Two panels, open where you click.** The right pill grows into a control centre
+    (system), the centre island keeps personal things. Before, everything opened from the
+    middle, far from where it was clicked. Each page declares its panel
+    (`IslandState.owner`); one open at a time; a page moves to its panel if asked from the
+    other. `Morph` (pill→panel) and `PanelBody` (the page) are shared by both.
+  - **Keyboard.** `HyprlandFocusGrab` routes keys to the open panel (the focus property
+    alone didn't once the surface was up), so panels opened by a key take arrows/typing/Esc
+    with no click. The bar window is now full screen height, so a background `MouseArea`
+    dismisses on any outside click — the separate `OutsideClick` catcher is gone.
+  - **Enterprise Wi-Fi (`scripts/a4a-wifi-join`).** Joins 802.1X/eduroam via NetworkManager
+    D-Bus; the form (PEAP/TTLS/TLS, identity, password, domain) goes in on stdin, so the
+    password is never in argv. Verified against UAF eduroam in range: strict TLS failed
+    with OpenSSL 3 "unsupported protocol" (the server only offers TLS 1.0/1.1), so the
+    script now retries with legacy TLS (`phase1-auth-flags` enable 1.0/1.1/1.2 +
+    `openssl-ciphers=DEFAULT@SECLEVEL=0`) and the form has an "older campus security"
+    toggle. With legacy on, the handshake completed to MSCHAPv2 and returned error 691
+    (the test password was a stand-in). The profile keeps whatever connected, and secrets
+    live in NetworkManager (root-only), so reconnect is automatic. Falls back to the old
+    connection on failure, and deletes a profile it made that didn't connect.
+  - **Bluetooth pairing (`scripts/a4a-bt-agent`).** Rewritten as a BlueZ agent that asks
+    through the control centre's pairing card (`Pairing.qml`/`PairingView.qml`) over IPC —
+    a Windows-11-style popup with the code shown large — and answers back on the session
+    bus. Confirm, authorize, service, PIN, passkey and display-code are all handled; it
+    never auto-accepts (the old agent did). Falls back to an actionable notification when
+    the bar is down. A paired device is trusted so it reconnects itself.
+  - **Keybinds.** Removed the SUPER+h/j/k/l focus binds that doubled up with split/swap/
+    lock (SUPER+L had locked *and* moved focus). Focus is arrows only. Added ALT+Tab,
+    SUPER+SHIFT+Q kill, SUPER+Y pin, SUPER+ALT+1–0 send-without-follow, CTRL+SUPER+SHIFT+←/→
+    carry-window, CTRL+SUPER+D empty desktop, and the panel keys SUPER+A/N/X/W plus
+    SUPER+CTRL+R restart-bar.
+  - **Lock wallpaper sync.** `a4a-lock` refreshes `~/.cache/a4a/lock.jpg` from whatever
+    awww is showing (JPEG, ~0.25 s vs ~1.1 s for the old PNG) before running hyprlock, so
+    the lock screen always matches the desktop even when the wallpaper was set another way.
+    The wallpaper picker previews live from cached screen-sized copies, reverts on Esc.

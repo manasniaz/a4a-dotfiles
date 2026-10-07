@@ -5,6 +5,8 @@ Rectangle {
     id: root
 
     property string label
+    // A glyph name from Icon.qml, shown instead of the label.
+    property string icon: ""
     // Power actions use this to show they are armed for a second click.
     property bool armed: false
     signal activated()
@@ -26,9 +28,18 @@ Rectangle {
     Text {
         id: labelText
         anchors.centerIn: parent
+        visible: root.icon === ""
         text: root.label
         color: root.armed ? Theme.bg : Theme.fg
         font.pixelSize: 13
+    }
+
+    Icon {
+        anchors.centerIn: parent
+        visible: root.icon !== ""
+        kind: root.icon
+        color: root.armed ? Theme.bg : Theme.fg
+        font.pixelSize: 16
     }
 
     MouseArea {

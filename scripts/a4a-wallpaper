@@ -4,6 +4,11 @@
 #   a4a-wallpaper restore       re-apply the remembered wallpaper (run at login)
 #   a4a-wallpaper list          thumbnails of the folder, for the island picker
 #   a4a-wallpaper random        set a random image from the folder
+#   a4a-wallpaper preview <image>   show an image on the desktop for a moment, without
+#                               re-theming or remembering it (the picker's live preview)
+#   a4a-wallpaper current       the image on screen now (awww's answer, else the state file)
+#   a4a-wallpaper lockimage <image>   make the lock screen's copy of an image, if the
+#                               current copy wasn't made from it (a4a-lock runs this)
 set -euo pipefail
 
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/a4a/wallpaper"
@@ -11,6 +16,13 @@ DEFAULT="$HOME/Pictures/wallpaper.jpg"
 # The picker's folder. Per machine: change it here, and nothing else needs to move.
 FOLDER="$HOME/Pictures/Wallpapers"
 THUMBS="$HOME/.cache/a4a/thumbs"
+# Screen-sized copies for the picker's live preview: awww decodes these far faster
+# than a 5K original, so moving through the grid keeps up with the keys.
+PREVIEWS="$HOME/.cache/a4a/previews"
+# The lock screen's background (hyprlock.conf reads it), and which image it was made
+# from, so it's only remade when the wallpaper really changed.
+LOCK_IMAGE="$HOME/.cache/a4a/lock.jpg"
+LOCK_SOURCE="$HOME/.cache/a4a/lock.src"
 
 # The daemon is started just before this at login, so wait for it to answer.
 wait_for_daemon() {
@@ -34,10 +46,21 @@ apply() {
     # small highlight. a4a-vibe picks the colour that covers the most of the
     # scene instead, and matugen builds the palette from that.
     matugen color hex "$("$VIBE" "$img")" --mode dark --quiet
-    # The lock screen reads one fixed file, so it gets a PNG copy of the wallpaper
-    # (any input format). Made here, not at lock time, so locking stays instant.
-    mkdir -p "$HOME/.cache/a4a"
-    ffmpeg -loglevel error -y -i "$img" -frames:v 1 -vf "scale=2560:-2" "$HOME/.cache/a4a/lock.png"
+    lock_image "$img"
+}
+
+# The lock screen reads one fixed file, so it gets its own copy of the wallpaper (any
+# input format), screen-sized JPEG: hyprlock blurs it, and a JPEG takes a quarter of a
+# second where a full-size PNG took over a second. Made here and checked again by
+# a4a-lock, so the lock screen always matches what's on screen.
+lock_image() {
+    local img="$1"
+    [[ -f "$LOCK_IMAGE" && "$(cat "$LOCK_SOURCE" 2>/dev/null)" == "$img" ]] && return 0
+    mkdir -p "$(dirname "$LOCK_IMAGE")"
+    # Written next to it and moved in, so a lock never reads a half-written file.
+    ffmpeg -loglevel error -nostdin -y -i "$img" -frames:v 1 -vf "scale=2560:-2" -q:v 3 "$LOCK_IMAGE.tmp.jpg"
+    mv -f "$LOCK_IMAGE.tmp.jpg" "$LOCK_IMAGE"
+    printf '%s\n' "$img" > "$LOCK_SOURCE"
 }
 
 # Every image in the folder, one per line, sorted by name.
@@ -52,6 +75,46 @@ thumb_for() {
     local img="$1" key
     key="$(printf '%s\n%s' "$img" "$(stat -c %Y "$img")" | sha1sum | cut -c1-16)"
     printf '%s/%s.jpg' "$THUMBS" "$key"
+}
+
+# Shows an image on the desktop, from a cached screen-sized copy, with a quick fade.
+# Nothing else changes: the palette, the lock image and the remembered wallpaper stay
+# as they are until `set`.
+preview() {
+    local img="$1" key copy
+    wait_for_daemon
+    key="$(printf '%s\n%s' "$img" "$(stat -c %Y "$img")" | sha1sum | cut -c1-16)"
+    copy="$PREVIEWS/$key.jpg"
+    if [[ ! -f "$copy" ]]; then
+        mkdir -p "$PREVIEWS"
+        ffmpeg -loglevel error -nostdin -y -i "$img" -frames:v 1 -vf "scale=2560:-2" -q:v 3 "$copy.tmp.jpg"
+        mv -f "$copy.tmp.jpg" "$copy"
+    fi
+    awww img --transition-type fade --transition-duration 0.25 --transition-fps 60 "$copy"
+}
+
+# Makes the preview copies ahead of time, so the first arrow press in the picker is
+# as quick as the rest. The picker starts it in the background.
+warm() {
+    local img key
+    mkdir -p "$PREVIEWS"
+    while IFS= read -r img; do
+        key="$(printf '%s\n%s' "$img" "$(stat -c %Y "$img")" | sha1sum | cut -c1-16)"
+        [[ -f "$PREVIEWS/$key.jpg" ]] && continue
+        nice -n 19 ffmpeg -loglevel error -nostdin -y -i "$img" -frames:v 1 -vf "scale=2560:-2" -q:v 3 \
+            "$PREVIEWS/$key.jpg.tmp.jpg" && mv -f "$PREVIEWS/$key.jpg.tmp.jpg" "$PREVIEWS/$key.jpg"
+    done < <(images)
+}
+
+current() {
+    local shown
+    shown="$(awww query 2>/dev/null | sed -n 's/.*currently displaying: image: //p' | head -n1)"
+    # A preview copy on screen means the picker is open; the real one is in the state file.
+    if [[ -n "$shown" && "$shown" != "$PREVIEWS"/* ]]; then
+        printf '%s\n' "$shown"
+    else
+        cat "$STATE" 2>/dev/null || true
+    fi
 }
 
 list() {
@@ -87,12 +150,26 @@ case "${1:-}" in
         mkdir -p "$(dirname "$STATE")"
         printf '%s\n' "$img" > "$STATE"
         ;;
+    preview)
+        [[ -f "${2:-}" ]] || { echo "usage: a4a-wallpaper preview <image>" >&2; exit 2; }
+        preview "$(realpath "$2")"
+        ;;
+    current)
+        current
+        ;;
+    warm)
+        warm
+        ;;
+    lockimage)
+        [[ -f "${2:-}" ]] || { echo "usage: a4a-wallpaper lockimage <image>" >&2; exit 2; }
+        lock_image "$(realpath "$2")"
+        ;;
     restore)
         if [[ -f "$STATE" ]]; then img="$(cat "$STATE")"; else img="$DEFAULT"; fi
         apply "$img"
         ;;
     *)
-        echo "usage: a4a-wallpaper {set <image>|restore|list|random}" >&2
+        echo "usage: a4a-wallpaper {set <image>|restore|list|random|preview <image>|current|warm|lockimage <image>}" >&2
         exit 2
         ;;
 esac

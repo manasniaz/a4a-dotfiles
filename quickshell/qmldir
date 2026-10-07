@@ -10,17 +10,14 @@ BluetoothView 1.0 BluetoothView.qml
 Card 1.0 Card.qml
 CalendarView 1.0 CalendarView.qml
 ClockView 1.0 ClockView.qml
-ClosedItem 1.0 ClosedItem.qml
 DetailHeader 1.0 DetailHeader.qml
 Icon 1.0 Icon.qml
 HomeView 1.0 HomeView.qml
 Island 1.0 Island.qml
-IslandPanel 1.0 IslandPanel.qml
 MediaView 1.0 MediaView.qml
 Meter 1.0 Meter.qml
 NetworkView 1.0 NetworkView.qml
 OptionRow 1.0 OptionRow.qml
-OutsideClick 1.0 OutsideClick.qml
 QuickCard 1.0 QuickCard.qml
 SettingsView 1.0 SettingsView.qml
 Slider 1.0 Slider.qml
@@ -33,7 +30,6 @@ OsdWindow 1.0 OsdWindow.qml
 singleton Updates 1.0 Updates.qml
 UpdatesCard 1.0 UpdatesCard.qml
 singleton NightLight 1.0 NightLight.qml
-NightLightCard 1.0 NightLightCard.qml
 MenuRow 1.0 MenuRow.qml
 NotificationsView 1.0 NotificationsView.qml
 PowerView 1.0 PowerView.qml
@@ -45,3 +41,17 @@ Tile 1.0 Tile.qml
 Tray 1.0 Tray.qml
 WifiView 1.0 WifiView.qml
 Workspaces 1.0 Workspaces.qml
+BarItem 1.0 BarItem.qml
+BarPill 1.0 BarPill.qml
+Hover 1.0 Hover.qml
+WindowTitle 1.0 WindowTitle.qml
+Divider 1.0 Divider.qml
+WifiGlyph 1.0 WifiGlyph.qml
+PanelBody 1.0 PanelBody.qml
+Morph 1.0 Morph.qml
+ControlView 1.0 ControlView.qml
+NotificationList 1.0 NotificationList.qml
+PairingView 1.0 PairingView.qml
+singleton Pairing 1.0 Pairing.qml
+Field 1.0 Field.qml
+EnterpriseForm 1.0 EnterpriseForm.qml

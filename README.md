@@ -34,11 +34,12 @@ Re-running it is safe.
    `system/greetd/README.md` (the login screen).
 
 Things to check on the new machine:
-- `btop/btop.conf` has the path to the theme with a placeholder (`YOUR_USER`). Replace it
-  with your user name before the first run (install.sh reminds you).
+- `btop/btop.conf` names its theme (`color_theme = "a4a"`); matugen writes that theme
+  into `~/.config/btop/themes/`, so it's the same on any machine. Nothing to change.
 - `hypr/monitors.lua` names the built-in panel `eDP-1`. Other screens use the fallback rule.
 - The getty fallback in `system/getty/` has a placeholder (`YOUR_USER`) for the user name.
-  It's disabled by default and isn't needed for the login screen.
+  Replace it with yours if you ever enable it. It's disabled by default and isn't needed
+  for the login screen.
 
 ## Notes
 

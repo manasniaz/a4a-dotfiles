@@ -1,54 +1,66 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Bluetooth
-import Quickshell.Networking
 
-// The island's front page: quick cards for Wi-Fi and Bluetooth, then the groups
-// you've chosen in Settings. Each group is a card, so the spacing and the
-// alignment are the same everywhere.
+// The island's front page: the personal things. The clock, what's playing, what's
+// been said (notifications), and launching. System controls live in the control
+// centre, under the right pill. Which cards show is set in Settings.
+//
+// Keys: N notifications, W wallpaper, C capture, S settings, M media, T clock,
+// D calendar, A the control centre. Escape closes.
 ColumnLayout {
     id: root
 
     spacing: 10
 
-    readonly property var wifi: Networking.devices.values.find(d => d.type === DeviceType.Wifi) ?? null
     readonly property var player: IslandState.player
 
-    readonly property var wifiNet: wifi ? wifi.networks.values.find(n => n.connected) ?? null : null
+    function handleKey(event) {
+        const pages = {
+            [Qt.Key_N]: "notifications", [Qt.Key_W]: "wallpaper", [Qt.Key_C]: "capture",
+            [Qt.Key_S]: "settings", [Qt.Key_M]: "media", [Qt.Key_T]: "clock",
+            [Qt.Key_D]: "calendar", [Qt.Key_A]: "control"
+        }
+        const page = pages[event.key]
+        if (page === undefined || event.modifiers !== Qt.NoModifier)
+            return false
+        IslandState.view = page
+        return true
+    }
+
+    SystemClock {
+        id: clock
+        precision: SystemClock.Minutes
+    }
 
     RowLayout {
         Layout.fillWidth: true
-        spacing: 10
-        visible: IslandState.inPanel("network") || IslandState.inPanel("bluetooth")
+        spacing: 8
 
-        QuickCard {
-            visible: IslandState.inPanel("network")
-            title: "Wi-Fi"
-            on: Networking.wifiEnabled
-            status: !Networking.wifiEnabled ? "Off"
-                : (root.wifiNet ? root.wifiNet.name + " · " + Stats.wifiPercent + "%" : "Not connected")
-            onOpened: IslandState.view = "wifi"
-            onToggled: Networking.wifiEnabled = !Networking.wifiEnabled
-        }
+        ColumnLayout {
+            spacing: 0
 
-        QuickCard {
-            visible: IslandState.inPanel("bluetooth")
-            title: "Bluetooth"
-            on: Bluetooth.defaultAdapter !== null && Bluetooth.defaultAdapter.enabled
-            status: {
-                const a = Bluetooth.defaultAdapter
-                if (!a) return "No adapter"
-                if (!a.enabled) return "Off"
-                const linked = a.devices.values.filter(d => d.connected)
-                return linked.length > 0 ? linked.map(d => d.name).join(", ") : "On"
+            Text {
+                text: Qt.formatTime(clock.date, "HH:mm")
+                color: Theme.fg
+                font.pixelSize: 26
+                font.weight: Font.DemiBold
+                font.features: { "tnum": 1 }
             }
-            onOpened: IslandState.view = "bluetooth"
-            onToggled: {
-                const a = Bluetooth.defaultAdapter
-                if (a) a.enabled = !a.enabled
+
+            Text {
+                text: Qt.formatDate(clock.date, "dddd, d MMMM")
+                color: Theme.fgDim
+                font.pixelSize: 11
             }
         }
+
+        Item { Layout.fillWidth: true }
+
+        Tile { icon: "image"; implicitWidth: 36; implicitHeight: 36; onActivated: IslandState.view = "wallpaper" }
+        Tile { icon: "camera"; implicitWidth: 36; implicitHeight: 36; onActivated: IslandState.view = "capture" }
+        Tile { icon: "cog"; implicitWidth: 36; implicitHeight: 36; onActivated: IslandState.view = "settings" }
+        Tile { icon: "close"; implicitWidth: 36; implicitHeight: 36; onActivated: IslandState.close() }
     }
 
     Card {
@@ -76,14 +88,43 @@ ColumnLayout {
                     Layout.fillWidth: true
                     elide: Text.ElideRight
                     text: root.player ? root.player.identity : ""
-                    color: Theme.muted
+                    color: Theme.fgFaint
                     font.pixelSize: 11
                 }
             }
 
-            Tile { label: "⏮"; implicitWidth: 40; implicitHeight: 32; onActivated: root.player.previous() }
-            Tile { label: root.player && root.player.isPlaying ? "⏸" : "▶"; implicitWidth: 40; implicitHeight: 32; onActivated: root.player.togglePlaying() }
-            Tile { label: "⏭"; implicitWidth: 40; implicitHeight: 32; onActivated: root.player.next() }
+            Tile { icon: "prev"; implicitWidth: 40; implicitHeight: 32; onActivated: root.player.previous() }
+            Tile { icon: root.player && root.player.isPlaying ? "pause" : "play"; implicitWidth: 40; implicitHeight: 32; onActivated: root.player.togglePlaying() }
+            Tile { icon: "next"; implicitWidth: 40; implicitHeight: 32; onActivated: root.player.next() }
+        }
+    }
+
+    Card {
+        visible: IslandState.inPanel("notifications")
+        title: notes.count > 0 ? "Notifications · " + notes.count : "Notifications"
+
+        NotificationList {
+            id: notes
+            limit: 3
+        }
+
+        RowLayout {
+            visible: notes.count > 0
+            Layout.fillWidth: true
+            spacing: 6
+
+            Tile {
+                Layout.fillWidth: true
+                implicitHeight: 32
+                label: notes.count > 3 ? "All " + notes.count : "Open"
+                onActivated: IslandState.view = "notifications"
+            }
+            Tile {
+                Layout.fillWidth: true
+                implicitHeight: 32
+                label: "Clear"
+                onActivated: notes.clear()
+            }
         }
     }
 
@@ -94,6 +135,7 @@ ColumnLayout {
         GridLayout {
             Layout.fillWidth: true
             columns: 2
+            uniformCellWidths: true
             rowSpacing: 6
             columnSpacing: 6
 
@@ -110,88 +152,5 @@ ColumnLayout {
                 onActivated: IslandState.run(["sh", "-c", "cliphist list | wofi --dmenu | cliphist decode | wl-copy"])
             }
         }
-    }
-
-    Card {
-        visible: IslandState.inPanel("sound")
-        title: "Sound"
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-
-            Tile {
-                implicitWidth: 40
-                implicitHeight: 34
-                onActivated: Volume.toggleMute()
-
-                Icon {
-                    anchors.centerIn: parent
-                    kind: "volume"
-                    value: Volume.volume
-                    muted: Volume.muted
-                    font.pixelSize: 16
-                    color: Theme.fg
-                }
-            }
-
-            Slider {
-                Layout.fillWidth: true
-                value: Volume.volume
-                onMoved: (v) => Volume.setVolume(v)
-            }
-
-            Text {
-                Layout.minimumWidth: 36
-                horizontalAlignment: Text.AlignRight
-                text: Volume.percent + "%"
-                color: Theme.fg
-                font.pixelSize: 13
-            }
-        }
-    }
-
-    Card {
-        visible: IslandState.inPanel("brightness") && Brightness.present
-        title: "Brightness"
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-
-            Icon {
-                Layout.preferredWidth: 40
-                horizontalAlignment: Text.AlignHCenter
-                kind: "brightness"
-                font.pixelSize: 16
-                color: Theme.fg
-            }
-
-            Slider {
-                Layout.fillWidth: true
-                value: Brightness.level
-                onMoved: (v) => Brightness.setLevel(v)
-            }
-
-            Text {
-                Layout.minimumWidth: 36
-                horizontalAlignment: Text.AlignRight
-                text: Brightness.percent + "%"
-                color: Theme.fg
-                font.pixelSize: 13
-            }
-        }
-    }
-
-    UpdatesCard {
-        visible: IslandState.inPanel("updates")
-    }
-
-    Card {
-        visible: IslandState.inPanel("system")
-        title: "System"
-
-        SystemStats {}
-        Battery {}
     }
 }

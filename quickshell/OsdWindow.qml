@@ -10,15 +10,18 @@ PanelWindow {
 
     required property var screen
 
-    visible: Osd.shown
+    // Stays up until the fade-out has finished.
+    visible: Osd.shown || card.opacity > 0
     screen: osd.screen
     anchors {
         top: true
         left: true
         right: true
     }
-    margins.top: 12
-    implicitHeight: 60
+    // exclusiveZone 0 keeps it clear of the bar's reserved strip, so this margin is
+    // only the gap under the bar. With the bar hidden (fullscreen) it sits at the top.
+    margins.top: 10
+    implicitHeight: 70
     exclusiveZone: 0
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Overlay
@@ -28,15 +31,16 @@ PanelWindow {
     readonly property bool isBrightness: Osd.kind === "brightness"
     readonly property real level: isBrightness ? Brightness.level : Volume.volume
 
-    Rectangle {
+    BarPill {
+        id: card
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
+        y: Osd.shown ? 0 : -6
         width: 240
         height: 46
-        radius: 23
-        color: Theme.pill
-        border.width: 1
-        border.color: Qt.rgba(Theme.muted.r, Theme.muted.g, Theme.muted.b, 0.5)
+        opacity: Osd.shown ? 1 : 0
+
+        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on y { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
         Row {
             anchors.centerIn: parent
@@ -63,6 +67,8 @@ PanelWindow {
                     height: parent.height
                     radius: 3
                     color: Theme.accent
+
+                    Behavior on width { NumberAnimation { duration: 90 } }
                 }
             }
 
@@ -73,6 +79,7 @@ PanelWindow {
                 text: Math.round(osd.level * 100) + "%"
                 color: Theme.fg
                 font.pixelSize: 13
+                font.features: { "tnum": 1 }
             }
         }
     }

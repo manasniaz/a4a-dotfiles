@@ -10,7 +10,6 @@ ColumnLayout {
 
     DetailHeader {
         title: "Sound"
-        backTo: "home"
     }
 
     Card {
@@ -58,7 +57,7 @@ ColumnLayout {
             Layout.fillWidth: true
             visible: Volume.sinks.length === 0
             text: "No audio output found."
-            color: Theme.muted
+            color: Theme.fgFaint
             font.pixelSize: 12
         }
 
@@ -100,7 +99,7 @@ ColumnLayout {
                     Text {
                         visible: parent.parent.isDefault
                         text: "in use"
-                        color: Theme.muted
+                        color: Theme.fgFaint
                         font.pixelSize: 10
                     }
                 }

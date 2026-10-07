@@ -25,7 +25,7 @@ Rectangle {
         Text {
             visible: root.title !== ""
             text: root.title
-            color: Theme.muted
+            color: Theme.fgFaint
             font.pixelSize: 10
             font.weight: Font.DemiBold
             font.letterSpacing: 1

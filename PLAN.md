@@ -2,6 +2,38 @@
 
 ## Current status
 
+_Session 27 — 2026-10-07 — quality pass (unixporn-tier)_
+
+A big polish pass. Full detail in `docs/decisions.md` (session 27).
+
+- **Bar/island rebuilt** for real visual hierarchy and depth: loud clock, quiet
+  CPU/RAM, arc Wi-Fi, one hover tint, hairline + soft shadow. Written fresh, inspired
+  by surface-dots, nothing copied.
+- **Two panels that open where you click:** the right pill → control centre (system),
+  the centre island → personal things. Keyboard routed by `HyprlandFocusGrab`; the
+  bar window is full height so any outside click dismisses.
+- **Enterprise/eduroam Wi-Fi** (`scripts/a4a-wifi-join`): 802.1X with a credential form,
+  auto legacy-TLS fallback for old campus RADIUS. Tested against UAF eduroam in range
+  (handshake reached MSCHAPv2; test password was a stand-in).
+- **Bluetooth pairing popup** (`scripts/a4a-bt-agent` → `PairingView`): a real
+  confirm/PIN/passkey prompt, no more bluetoothctl. Tested all request kinds.
+- **Keybinds** cleaned up (removed the SUPER+hjkl focus/lock collision) and extended
+  (ALT+Tab, pin, kill, carry-window, empty desktop, panel keys A/N/X/W).
+- **Lock screen always matches the desktop wallpaper** (`a4a-lock`), and the wallpaper
+  picker previews live and navigates by arrow keys.
+- Verified: cold Quickshell restart with 0 errors/0 warnings, `hyprctl configerrors`
+  empty, no duplicate binds, real-input tests for each feature (ydotool + grim).
+
+### Still to do
+
+- Push to both repos: private `manasniaz/A4A` (full) and public `a4a-dotfiles`
+  (sanitised — no machine paths, no eduroam/credentials baked in).
+- Not re-tested on real hardware this session: a live eduroam login with the real
+  password, and pairing a real mouse/keyboard (only the agent's request kinds were
+  exercised, not an actual device handshake).
+
+---
+
 _Session 1 — 2026-10-04_
 
 - Arch Linux + bare Hyprland (0.56.2) installed and running.
@@ -21,11 +53,11 @@ _Session 1 — 2026-10-04_
       start. Confirmed in session 2: the wallpaper appears after a restart.
 - [x] `git` installed and `~/Projects/A4A` initialized as a repo (branch
       `main`, no commits yet).
-- [x] `gh` installed and logged in.
+- [x] `gh` installed and logged in as `manasniaz`.
 
 _Session 2 — 2026-10-04_
 
-- Repo pushed to a GitHub repo (initial commit `0302e7e`).
+- Repo pushed to private GitHub repo `manasniaz/A4A` (initial commit `0302e7e`).
 - **awww** (wallpaper) done: `awww-daemon` then `awww img` in
   `hypr/autostart.lua`. The wallpaper is `~/Pictures/wallpaper.jpg` (a copy of
   the 5120×2880 image from Downloads, kept out of the repo). Verified live on
@@ -369,7 +401,7 @@ Each item says what it is and what's needed. Nothing here is started unless mark
    terminal with the update. Session 24: the card was below the island's scroll cap, so
    it's visible now; Update itself is untested (it runs a real `sudo pacman -Syu`).
 9. [x] **Night light:** warm-screen schedule (hyprsunset, as ML4W does). Session 24: seen
-   warm on the real screen in the evening (timezone set to the local one). Screenshots can't
+   warm on the real screen at 20:35 PKT (timezone set to Asia/Karachi). Screenshots can't
    show the filter, so that was checked by eye.
 10. [x] **Wallpaper picker:** choose from a grid; the whole palette updates.
 11. [x] **GTK theme from the palette:** gtk-3 CSS, checked on Thunar (within about 4 units
@@ -418,9 +450,9 @@ _Session 24 — 2026-10-04_
   plasma-integration and breeze packages (install.sh), the KDE colour templates, and the
   CLAUDE.md line. `QT_QPA_PLATFORM=wayland;xcb` stays. The qt5/qt6 Wayland packages stay.
 - Night light: hyprsunset's `temperature` and `identity` commands work. The card lives in
-  Settings, not on home. The warm screen test waited for the timezone.
-- Night light confirmed on the real screen, in the evening. The timezone was set to
-  the local zone (`timedatectl`), since the system had been on UTC. The switch was left on.
+  Settings, not on home. The warm screen test waits for the Pakistan timezone.
+- Night light confirmed on the real screen, at 20:35 Pakistan time. The timezone was set to
+  Asia/Karachi (`timedatectl`), since the system had been on UTC. The switch was left on.
 
 _Session 26 — 2026-10-04_
 

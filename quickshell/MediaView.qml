@@ -13,7 +13,6 @@ ColumnLayout {
 
     DetailHeader {
         title: "Media"
-        backTo: "home"
     }
 
     Card {
@@ -34,7 +33,7 @@ ColumnLayout {
             visible: root.player !== null && root.player.trackAlbum !== ""
             elide: Text.ElideRight
             text: root.player ? root.player.trackAlbum : ""
-            color: Theme.muted
+            color: Theme.fgFaint
             font.pixelSize: 12
         }
 
@@ -43,7 +42,7 @@ ColumnLayout {
             visible: root.player === null
             text: "Start something in a player, and it shows up here."
             wrapMode: Text.WordWrap
-            color: Theme.muted
+            color: Theme.fgFaint
             font.pixelSize: 12
         }
 
@@ -55,9 +54,9 @@ ColumnLayout {
 
             Item { Layout.fillWidth: true }
 
-            Tile { label: "⏮"; implicitWidth: 52; implicitHeight: 36; onActivated: root.player.previous() }
-            Tile { label: root.player && root.player.isPlaying ? "⏸" : "▶"; implicitWidth: 52; implicitHeight: 36; onActivated: root.player.togglePlaying() }
-            Tile { label: "⏭"; implicitWidth: 52; implicitHeight: 36; onActivated: root.player.next() }
+            Tile { icon: "prev"; implicitWidth: 52; implicitHeight: 36; onActivated: root.player.previous() }
+            Tile { icon: root.player && root.player.isPlaying ? "pause" : "play"; implicitWidth: 52; implicitHeight: 36; onActivated: root.player.togglePlaying() }
+            Tile { icon: "next"; implicitWidth: 52; implicitHeight: 36; onActivated: root.player.next() }
 
             Item { Layout.fillWidth: true }
         }

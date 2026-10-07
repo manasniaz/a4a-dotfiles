@@ -11,7 +11,6 @@ ColumnLayout {
 
     DetailHeader {
         title: "Capture"
-        backTo: "home"
     }
 
     Card {

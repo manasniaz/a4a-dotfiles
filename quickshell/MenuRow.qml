@@ -41,7 +41,7 @@ Rectangle {
         Text {
             visible: root.submenu
             text: "›"
-            color: Theme.muted
+            color: Theme.fgFaint
             font.pixelSize: 14
         }
     }

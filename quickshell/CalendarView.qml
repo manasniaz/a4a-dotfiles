@@ -25,7 +25,6 @@ ColumnLayout {
 
     DetailHeader {
         title: "Calendar"
-        backTo: "home"
 
         Tile {
             label: "Today"
@@ -77,7 +76,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 text: modelData
-                color: Theme.muted
+                color: Theme.fgFaint
                 font.pixelSize: 10
                 font.weight: Font.DemiBold
             }

@@ -50,6 +50,30 @@ Patterns and rules specific to this project. Add to this as decisions are made.
 - Pills use an opaque colour (`Theme.pill` = surface). A see-through pill lets
   the text of windows behind it show through.
 
+- **Keyboard focus on a layer surface:** flipping `WlrLayershell.keyboardFocus`
+  from `None` to `Exclusive`/`OnDemand` on an already-mapped surface does *not*
+  make Hyprland route keys to it. Use `HyprlandFocusGrab { windows: [win]; active }`
+  — it grabs the keyboard and, by `onCleared`, dismisses on an outside click. That
+  replaced the old outside-click catcher window.
+- **Dismiss on outside click:** the bar window is the full screen height when open,
+  so a plain background `MouseArea` (enabled while open) catches every click off a
+  panel and closes it. The mask keeps clicks to the pills while closed, so windows
+  underneath still get them. Simpler than a second catcher window.
+- **One component for both pills:** `Morph` is the pill-that-grows-into-a-panel
+  (size, corners, fades driven by one `progress`), and `PanelBody` is the page inside
+  it (a `Loader` keyed on `IslandState.view`, plus a `handleKey` the bar calls for
+  arrows/letters). The island and the control centre are both a `Morph`.
+- A `ColumnLayout`/`RowLayout` is never wider than its children need, so a child that
+  should fill needs `Layout.fillWidth: true` on *it*, not only on its parent. For even
+  two-column grids of toggles, put `Layout.fillWidth` on the label `Text` inside each
+  row and `uniformCellWidths: true` on the `GridLayout`.
+- Fixed-width digits: `font.features: { "tnum": 1 }` stops the clock and percentages
+  jiggling as they change.
+- Draw Wi-Fi bars as arcs (`WifiGlyph`, a `Canvas`): the Nerd Font signal glyphs read
+  as a solid triangle at bar size.
+- `Process` + `SplitParser` reads a script's progress line by line; write the form to
+  its stdin (`stdinEnabled`, then `write`, then close) so secrets never hit argv.
+
 ## Layout
 
 - One top-level folder per component, mirroring `~/.config/<name>/`.

@@ -3,10 +3,15 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Networking
 
-// Wi-Fi detail: the radio switch, then the networks nearby. Open and saved
-// networks connect with one click. A secured network you haven't joined before
-// opens a password field under it. The island's own panel scrolls this, so the
-// list is a plain column and never scrolls by itself.
+// Wi-Fi: the radio switch, then the networks nearby, strongest first, the joined one
+// on top. A click does the obvious thing for each kind of network:
+//   joined                 disconnect
+//   saved, or open         connect
+//   password (WPA-PSK)     a password field under it
+//   enterprise (802.1X)    a sign-in form under it (EnterpriseForm: eduroam and the like)
+// Saved networks can be forgotten from their row. Connecting and failing show under
+// the row, so a wrong password says so instead of nothing happening.
+// The panel scrolls this, so the list is a plain column.
 ColumnLayout {
     id: root
 
@@ -14,10 +19,22 @@ ColumnLayout {
 
     readonly property var wifi: Networking.devices.values.find(d => d.type === DeviceType.Wifi) ?? null
     readonly property var current: wifi ? wifi.networks.values.find(n => n.connected) ?? null : null
-    readonly property var networks: wifi ? wifi.networks.values : []
+    readonly property var networks: {
+        const list = wifi ? wifi.networks.values.slice() : []
+        return list.sort((a, b) => (b.connected - a.connected) || (b.known - a.known) || (b.signalStrength - a.signalStrength))
+    }
+    // The network whose form is open, by name.
     property string picking: ""
+    // Last failure, by network name: {name, text}.
+    property var failure: null
 
-    // Scan only while this view is on screen. The scanner belongs to the Wi-Fi device.
+    function isEnterprise(n) {
+        return n.security === WifiSecurityType.Wpa2Eap || n.security === WifiSecurityType.WpaEap
+            || n.security === WifiSecurityType.Wpa3SuiteB192 || n.security === WifiSecurityType.Leap
+            || n.security === WifiSecurityType.DynamicWep
+    }
+
+    // Scan only while this page is on screen. The scanner belongs to the Wi-Fi device.
     Binding {
         target: root.wifi
         property: "scannerEnabled"
@@ -27,7 +44,6 @@ ColumnLayout {
 
     DetailHeader {
         title: "Wi-Fi"
-        backTo: "home"
 
         Switch {
             checked: Networking.wifiEnabled
@@ -39,7 +55,7 @@ ColumnLayout {
         Layout.fillWidth: true
         text: !Networking.wifiEnabled ? "Wi-Fi is off"
             : (root.current ? "Connected to " + root.current.name : "Not connected")
-        color: Theme.muted
+        color: Theme.fgFaint
         font.pixelSize: 11
     }
 
@@ -51,106 +67,170 @@ ColumnLayout {
             required property var modelData
 
             Layout.fillWidth: true
-            spacing: 4
+            spacing: 6
 
-            readonly property bool secured: modelData.security !== WifiSecurityType.Open
-            readonly property bool needsPassword: secured && !modelData.known && !modelData.connected
+            readonly property var net: modelData
+            readonly property bool secured: net.security !== WifiSecurityType.Open
+            readonly property bool enterprise: root.isEnterprise(net)
+            readonly property bool needsForm: secured && !net.known && !net.connected
+            readonly property bool open: root.picking === net.name
+            readonly property bool busy: net.state === ConnectionState.Connecting || net.stateChanging
+            readonly property string failText: root.failure && root.failure.name === net.name ? root.failure.text : ""
+
+            Connections {
+                target: entry.net
+                function onConnectionFailed(reason) {
+                    root.failure = {
+                        name: entry.net.name,
+                        text: reason === ConnectionFailReason.NoSecrets ? "Wrong password, or the network refused it."
+                            : reason === ConnectionFailReason.WifiAuthTimeout ? "The network didn't answer in time."
+                            : reason === ConnectionFailReason.WifiNetworkLost ? "The network went out of range."
+                            : "Couldn't connect."
+                    }
+                }
+                function onConnectedChanged() {
+                    if (entry.net.connected && root.failure && root.failure.name === entry.net.name)
+                        root.failure = null
+                }
+            }
 
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: 40
+                implicitHeight: 42
                 radius: 10
-                color: rowMouse.containsMouse ? Qt.lighter(Theme.card, 1.15) : "transparent"
+                color: rowHover.hovered || entry.open ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.06) : "transparent"
+
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                // Passive, so it stays hovered over the row's own buttons too.
+                HoverHandler {
+                    id: rowHover
+                }
 
                 MouseArea {
                     id: rowMouse
                     anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        if (entry.modelData.connected)
-                            entry.modelData.disconnect()
-                        else if (!entry.needsPassword)
-                            entry.modelData.connect()
+                        root.failure = null
+                        if (entry.net.connected)
+                            entry.net.disconnect()
+                        else if (!entry.needsForm)
+                            entry.net.connect()
                         else
-                            root.picking = root.picking === entry.modelData.name ? "" : entry.modelData.name
+                            root.picking = entry.open ? "" : entry.net.name
                     }
                 }
 
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 12
-                    anchors.rightMargin: 12
-                    spacing: 8
+                    anchors.rightMargin: 8
+                    spacing: 10
 
-                    Text {
+                    WifiGlyph {
+                        value: entry.net.signalStrength
+                        color: entry.net.connected ? Theme.accent : Theme.fg
+                    }
+
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        text: entry.modelData.name
-                        color: entry.modelData.connected ? Theme.accent : Theme.fg
-                        font.pixelSize: 13
+                        spacing: 0
+
+                        Text {
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            text: entry.net.name
+                            color: entry.net.connected ? Theme.accent : Theme.fg
+                            font.pixelSize: 13
+                            font.weight: entry.net.connected ? Font.DemiBold : Font.Normal
+                        }
+
+                        Text {
+                            text: entry.busy ? "Connecting…"
+                                : entry.net.connected ? "Connected"
+                                : [entry.net.known ? "Saved" : "",
+                                   entry.enterprise ? "Sign-in (enterprise)" : (entry.secured ? "Password" : "Open")]
+                                    .filter(s => s).join(" · ")
+                            color: Theme.fgFaint
+                            font.pixelSize: 10
+                        }
+                    }
+
+                    // Saved networks: forget. Only on hover, so the list stays calm.
+                    Tile {
+                        visible: entry.net.known && rowHover.hovered
+                        implicitHeight: 26
+                        label: "Forget"
+                        onActivated: {
+                            if (root.picking === entry.net.name)
+                                root.picking = ""
+                            entry.net.forget()
+                        }
                     }
 
                     Text {
-                        text: entry.secured ? "secured" : "open"
-                        color: Theme.muted
-                        font.pixelSize: 10
-                    }
-
-                    Text {
-                        text: Math.round(entry.modelData.signalStrength * 100) + "%"
-                        color: Theme.muted
+                        text: Math.round(entry.net.signalStrength * 100) + "%"
+                        color: Theme.fgFaint
                         font.pixelSize: 11
+                        font.features: { "tnum": 1 }
                     }
                 }
             }
 
-            // Password field, shown under a secured network you haven't joined.
-            Rectangle {
-                visible: entry.needsPassword && root.picking === entry.modelData.name
+            Text {
+                visible: entry.failText !== ""
                 Layout.fillWidth: true
-                implicitHeight: visible ? 40 : 0
-                radius: 10
-                color: Theme.bg
+                Layout.leftMargin: 12
+                wrapMode: Text.WordWrap
+                text: entry.failText
+                color: Theme.accent
+                font.pixelSize: 11
+            }
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 6
-                    spacing: 6
+            // Password networks: one field. Enter joins.
+            RowLayout {
+                visible: entry.open && entry.needsForm && !entry.enterprise
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 4
+                spacing: 6
 
-                    TextInput {
-                        id: pass
-                        Layout.fillWidth: true
-                        echoMode: TextInput.Password
-                        color: Theme.fg
-                        font.pixelSize: 13
-                        clip: true
-                        focus: parent.visible
-                        verticalAlignment: TextInput.AlignVCenter
-                        onAccepted: join.trigger()
-                        Text {
-                            anchors.fill: parent
-                            verticalAlignment: Text.AlignVCenter
-                            visible: pass.text === ""
-                            text: "Password"
-                            color: Theme.muted
-                            font.pixelSize: 13
-                        }
+                Field {
+                    id: pass
+                    password: true
+                    placeholder: "Password for " + entry.net.name
+                    onAccepted: join.activated()
+                    onVisibleChanged: if (visible) focusField()
+                }
+
+                Tile {
+                    id: join
+                    label: "Join"
+                    implicitHeight: 36
+                    armed: pass.text.length >= 8
+                    onActivated: {
+                        // WPA passwords are 8 to 63 characters; anything else can't work.
+                        if (pass.text.length < 8)
+                            return
+                        root.failure = null
+                        entry.net.connectWithPsk(pass.text)
+                        pass.text = ""
+                        root.picking = ""
                     }
+                }
+            }
 
-                    Tile {
-                        id: join
-                        label: "Join"
-                        implicitHeight: 28
-                        function trigger() {
-                            if (pass.text !== "") {
-                                entry.modelData.connectWithPsk(pass.text)
-                                pass.text = ""
-                                root.picking = ""
-                            }
-                        }
-                        onActivated: trigger()
-                    }
+            // Enterprise networks: the sign-in form.
+            Loader {
+                active: entry.open && entry.needsForm && entry.enterprise
+                visible: active
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 4
+                sourceComponent: EnterpriseForm {
+                    ssid: entry.net.name
+                    onJoined: root.picking = ""
                 }
             }
         }
@@ -159,7 +239,16 @@ ColumnLayout {
     Text {
         visible: Networking.wifiEnabled && root.networks.length === 0
         text: "Looking for networks…"
-        color: Theme.muted
+        color: Theme.fgFaint
         font.pixelSize: 12
+    }
+
+    // Hidden networks, static addresses, certificates beyond the form: NetworkManager's
+    // own editor.
+    Tile {
+        Layout.fillWidth: true
+        implicitHeight: 32
+        label: "Network settings…"
+        onActivated: IslandState.run(["nm-connection-editor"])
     }
 }

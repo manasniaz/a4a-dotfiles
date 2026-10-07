@@ -29,6 +29,9 @@
     layer = overlay
     mouse_left_click = close_current
     mouse_right_click = do_action, close_current
+    # A notification with several actions and no "default" one lists them in a menu
+    # (dunstctl context); wofi draws it, since dmenu isn't installed.
+    dmenu = /usr/bin/wofi --dmenu --prompt dunst
     background = "{{colors.surface_container.dark.hex}}"
     foreground = "{{colors.on_surface.dark.hex}}"
     frame_color = "{{colors.outline_variant.dark.hex}}"

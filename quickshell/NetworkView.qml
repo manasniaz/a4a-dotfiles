@@ -14,7 +14,6 @@ ColumnLayout {
 
     DetailHeader {
         title: "Network"
-        backTo: "home"
     }
 
     Card {
@@ -27,14 +26,14 @@ ColumnLayout {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 2
-                Text { text: "Download"; color: Theme.muted; font.pixelSize: 11 }
+                Text { text: "Download"; color: Theme.fgFaint; font.pixelSize: 11 }
                 Text { text: Stats.fmtRate(Stats.downBps); color: Theme.fg; font.pixelSize: 20; font.weight: Font.DemiBold }
             }
 
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 2
-                Text { text: "Upload"; color: Theme.muted; font.pixelSize: 11 }
+                Text { text: "Upload"; color: Theme.fgFaint; font.pixelSize: 11 }
                 Text { text: Stats.fmtRate(Stats.upBps); color: Theme.fg; font.pixelSize: 20; font.weight: Font.DemiBold }
             }
         }

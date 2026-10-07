@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Locks the screen, always on the wallpaper that's showing right now.
+#
+# awww is asked which image is on screen. If the lock screen's copy was made from a
+# different image (a wallpaper set some other way than a4a-wallpaper, or a run that
+# failed half way), it's made again first, which takes about a quarter of a second.
+# Then hyprlock runs. SUPER+L, the power page's Lock, and hypridle (idle, lid, sleep)
+# all lock through here.
+set -u
+
+# Already locked: hypridle can ask twice (idle, then before sleep).
+pidof hyprlock >/dev/null && exit 0
+
+WALLPAPER="$(dirname "$(readlink -f "$0")")/a4a-wallpaper"
+# The wallpaper on screen (awww's answer; while the picker previews, the real one).
+current="$("$WALLPAPER" current)"
+if [[ -n "$current" && -f "$current" ]]; then
+    # Only remakes it when it's out of date.
+    "$WALLPAPER" lockimage "$current" || echo "a4a-lock: couldn't refresh the lock image" >&2
+fi
+
+exec hyprlock -c "$HOME/.config/hyprlock/hyprlock.conf"

@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+# Joins a WPA-Enterprise (802.1X) Wi-Fi network, eduroam and the like, through
+# NetworkManager's D-Bus API. The bar's Wi-Fi page runs this for networks that ask
+# for a username rather than a single password.
+#
+# The form comes in as one JSON object on stdin, so the password is never on a
+# command line (where every user can read it with `ps`):
+#   {"ssid": "eduroam", "eap": "peap" | "ttls" | "tls",
+#    "identity": "...", "password": "...", "phase2": "mschapv2" | "pap",
+#    "anonymous": "", "domain": "",
+#    "cert": "/path/client.pem", "key": "/path/client.key", "keyPassword": ""}
+#
+# Progress goes to stdout as one JSON object per line:
+#   {"state": "connecting"}   ... then {"ok": true} or {"ok": false, "reason": "..."}
+# Exit status 0 on success.
+#
+# The profile is a normal system connection: NetworkManager keeps the secrets in a
+# root-only file in /etc/NetworkManager/system-connections, and reconnects to it
+# by itself from then on. Re-running for a known network updates its settings, so a
+# changed password is fixed the same way it was first entered. A new profile that
+# fails to connect is removed again, so a typo doesn't leave it retrying.
+#
+#   a4a-wifi-join --test   check the input and print the settings it would use
+#                          (password masked), without touching NetworkManager.
+import json
+import os
+import sys
+import time
+import uuid
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+NM = "org.freedesktop.NetworkManager"
+NM_PATH = "/org/freedesktop/NetworkManager"
+SETTINGS_PATH = "/org/freedesktop/NetworkManager/Settings"
+TIMEOUT_S = 60
+
+# Used to check the server's certificate when no CA file is given.
+SYSTEM_CA = "/etc/ssl/certs/ca-certificates.crt"
+
+# NMDeviceStateReason values that come up when 802.1X fails, in plain words.
+REASONS = {
+    # NetworkManager reports 7 (no-secrets) for a wrong password too: 802.1X auth
+    # failures come back as "it wants secrets", not as a distinct failure code.
+    7: "Sign-in was refused. Check the username and password"
+       " (and the domain, if you set one).",
+    8: "Sign-in was refused. Check the username and password"
+       " (and the domain, if you gave one).",
+    9: "The network rejected these settings. Check the method and inner authentication.",
+    10: "Sign-in failed. Check the username, password and method.",
+    11: "The network didn't answer in time. Try again, closer to an access point.",
+    53: "The network isn't in range.",
+}
+
+
+def say(**fields):
+    print(json.dumps(fields), flush=True)
+
+
+def fail(reason):
+    say(ok=False, reason=reason)
+    sys.exit(1)
+
+
+def path_bytes(path):
+    # NetworkManager takes certificate paths as a NUL-terminated file:// URI.
+    return GLib.Variant("ay", ("file://" + os.path.abspath(path)).encode() + b"\0")
+
+
+def build(form, legacy=False):
+    ssid = form.get("ssid", "")
+    eap = form.get("eap", "peap")
+    identity = form.get("identity", "").strip()
+    if not ssid:
+        fail("No network name.")
+    if eap not in ("peap", "ttls", "tls"):
+        fail("Unknown method: " + eap)
+    if not identity:
+        fail("Enter a username (identity).")
+
+    dot1x = {
+        "eap": GLib.Variant("as", [eap]),
+        "identity": GLib.Variant("s", identity),
+    }
+    if eap in ("peap", "ttls"):
+        password = form.get("password", "")
+        if not password:
+            fail("Enter the password.")
+        phase2 = form.get("phase2", "mschapv2")
+        if phase2 not in ("mschapv2", "pap", "gtc"):
+            fail("Unknown inner authentication: " + phase2)
+        dot1x["password"] = GLib.Variant("s", password)
+        # 0: NetworkManager stores the secret itself, so it reconnects unattended.
+        dot1x["password-flags"] = GLib.Variant("u", 0)
+        dot1x["phase2-auth"] = GLib.Variant("s", phase2)
+    else:
+        cert, key = form.get("cert", ""), form.get("key", "")
+        for label, path in (("certificate", cert), ("private key", key)):
+            if not path:
+                fail("Choose the client " + label + " file.")
+            if not os.path.isfile(path):
+                fail("No such file: " + path)
+        dot1x["client-cert"] = path_bytes(cert)
+        dot1x["private-key"] = path_bytes(key)
+        dot1x["private-key-password"] = GLib.Variant("s", form.get("keyPassword", ""))
+        dot1x["private-key-password-flags"] = GLib.Variant("u", 0)
+
+    anonymous = form.get("anonymous", "").strip()
+    if anonymous:
+        dot1x["anonymous-identity"] = GLib.Variant("s", anonymous)
+
+    # With a domain, the server's certificate is checked against the system CAs and
+    # must belong to that domain, so a fake access point can't collect the password.
+    # Without one, NetworkManager can't check who it's talking to.
+    domain = form.get("domain", "").strip()
+    if domain:
+        dot1x["domain-suffix-match"] = GLib.Variant("s", domain)
+        dot1x["ca-cert"] = path_bytes(SYSTEM_CA)
+
+    # Some campus RADIUS servers (eduroam among them) only offer TLS 1.0 or 1.1 for
+    # the PEAP/TTLS tunnel, which OpenSSL 3 refuses by default ("unsupported
+    # protocol"), so the tunnel never opens and the password is never checked. Legacy
+    # mode enables those TLS versions and lowers OpenSSL's security level for this one
+    # connection. The password is still inside the tunnel, and the server certificate
+    # is still checked when a domain was given, so it stays safe to use on campus.
+    if legacy:
+        # Enable TLS 1.0, 1.1 and 1.2 (NMSetting8021xAuthFlags: 32 | 64 | 128).
+        dot1x["phase1-auth-flags"] = GLib.Variant("u", 32 | 64 | 128)
+        dot1x["openssl-ciphers"] = GLib.Variant("s", "DEFAULT@SECLEVEL=0")
+
+    return {
+        "connection": {
+            "id": GLib.Variant("s", ssid),
+            "uuid": GLib.Variant("s", str(uuid.uuid4())),
+            "type": GLib.Variant("s", "802-11-wireless"),
+            "autoconnect": GLib.Variant("b", True),
+        },
+        "802-11-wireless": {
+            "ssid": GLib.Variant("ay", ssid.encode()),
+            "mode": GLib.Variant("s", "infrastructure"),
+        },
+        "802-11-wireless-security": {"key-mgmt": GLib.Variant("s", "wpa-eap")},
+        "802-1x": dot1x,
+        "ipv4": {"method": GLib.Variant("s", "auto")},
+        "ipv6": {"method": GLib.Variant("s", "auto")},
+    }
+
+
+def to_variant(settings):
+    return GLib.Variant("a{sa{sv}}", settings)
+
+
+def call(bus, path, iface, method, args, reply):
+    return bus.call_sync(NM, path, iface, method, args,
+                         GLib.VariantType(reply) if reply else None,
+                         Gio.DBusCallFlags.NONE, 30000, None).unpack()
+
+
+def prop(bus, path, iface, name):
+    return call(bus, path, "org.freedesktop.DBus.Properties", "Get",
+                GLib.Variant("(ss)", (iface, name)), "(v)")[0]
+
+
+def wifi_device(bus):
+    for dev in call(bus, NM_PATH, NM, "GetDevices", None, "(ao)")[0]:
+        if prop(bus, dev, NM + ".Device", "DeviceType") == 2:
+            return dev
+    fail("No Wi-Fi device.")
+
+
+def existing(bus, ssid):
+    """The saved 802.1X profile for this network, if there is one."""
+    for path in call(bus, SETTINGS_PATH, NM + ".Settings", "ListConnections", None, "(ao)")[0]:
+        conf = call(bus, path, NM + ".Settings.Connection", "GetSettings", None, "(a{sa{sv}})")[0]
+        wifi = conf.get("802-11-wireless", {})
+        if bytes(wifi.get("ssid", b"")) == ssid.encode() and "802-1x" in conf:
+            return path, conf["connection"]
+    return None, None
+
+
+def watch(bus, device, active):
+    """Wait for an activation to finish. Returns (ok, reason)."""
+    loop = GLib.MainLoop()
+    result = {}
+
+    def finish(ok, reason=""):
+        if result:
+            return
+        result.update(ok=ok, reason=reason)
+        loop.quit()
+
+    # Gio passes the user data as a seventh argument, even when it's None.
+    def on_state(_c, _s, _p, _i, _sig, params, _data=None):
+        state, _reason = params.unpack()
+        if state == 2:          # activated
+            finish(True)
+        elif state == 4:        # deactivated
+            try:
+                _dstate, dreason = prop(bus, device, NM + ".Device", "StateReason")
+            except GLib.Error:
+                dreason = 0
+            finish(False, REASONS.get(dreason, "Couldn't connect (NetworkManager reason %d)." % dreason))
+
+    sub = bus.signal_subscribe(NM, NM + ".Connection.Active", "StateChanged", active, None,
+                               Gio.DBusSignalFlags.NONE, on_state, None)
+    # It may already be done by the time the signal is subscribed.
+    try:
+        if prop(bus, active, NM + ".Connection.Active", "State") == 2:
+            finish(True)
+    except GLib.Error:
+        # The active connection object is gone already: it failed straight away.
+        finish(False, "Couldn't connect.")
+    GLib.timeout_add_seconds(TIMEOUT_S, lambda: finish(False, REASONS[11]) or False)
+    if not result:
+        loop.run()
+    bus.signal_unsubscribe(sub)
+    return result["ok"], result["reason"]
+
+
+def put(bus, device, settings, path, old):
+    """Add the profile (or update the existing one) and activate it. Returns
+    (path, active). `path` is None for a profile we're creating."""
+    if path is None:
+        return call(bus, NM_PATH, NM, "AddAndActivateConnection",
+                    GLib.Variant("(a{sa{sv}}oo)", (settings, device, "/")), "(oo)")
+    # Keep the profile's identity, replace the rest.
+    settings["connection"]["id"] = GLib.Variant("s", old["id"])
+    settings["connection"]["uuid"] = GLib.Variant("s", old["uuid"])
+    call(bus, path, NM + ".Settings.Connection", "Update",
+         GLib.Variant("(a{sa{sv}})", (settings,)), None)
+    active = call(bus, NM_PATH, NM, "ActivateConnection",
+                  GLib.Variant("(ooo)", (path, device, "/")), "(o)")[0]
+    return path, active
+
+
+def main():
+    form = json.loads(sys.stdin.read() or "{}")
+
+    if "--test" in sys.argv:
+        settings = build(form, legacy="--legacy" in sys.argv)
+        shown = settings["802-1x"].copy()
+        for secret in ("password", "private-key-password"):
+            if secret in shown:
+                shown[secret] = GLib.Variant("s", "****")
+        print(to_variant({**settings, "802-1x": shown}).print_(True))
+        return
+
+    bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    device = wifi_device(bus)
+    ssid = form["ssid"]
+
+    path, old = existing(bus, ssid)
+    created = path is None
+    # What the Wi-Fi was on before, to go back to if this fails (as a phone does).
+    previous = None
+    try:
+        was_active = prop(bus, device, NM + ".Device", "ActiveConnection")
+        if was_active != "/":
+            previous = prop(bus, was_active, NM + ".Connection.Active", "Connection")
+    except GLib.Error:
+        pass
+
+    # Try normal TLS first, then legacy TLS, unless the form fixed the choice. Most
+    # networks connect on the first; the ones that need legacy (eduroam at some
+    # universities) get it on the second, and the profile keeps whatever worked.
+    if "legacy" in form:
+        modes = [bool(form["legacy"])]
+    else:
+        modes = [False, True]
+
+    ok, reason = False, "Couldn't connect."
+    for i, legacy in enumerate(modes):
+        if i > 0:
+            # A failed attempt makes wpa_supplicant blacklist the SSID, and a network
+            # with many access points (eduroam) racks that up to about half a minute,
+            # so an immediate retry can't even associate. Wait it out. For a quicker,
+            # sure path, turn on "older campus security" in the form: that skips the
+            # first attempt and goes straight to legacy, with no blacklist to clear.
+            say(state="retrying")
+            time.sleep(35)
+        else:
+            say(state="connecting")
+        try:
+            path, active = put(bus, device, build(form, legacy=legacy), path, old)
+        except GLib.Error as err:
+            # Drops the "GDBus.Error:org.freedesktop..." prefix from the message.
+            GLib.dbus_error_strip_remote_error(err)
+            ok, reason = False, err.message
+            break
+        # After the first attempt the profile exists, so the next updates it.
+        if path is not None:
+            _p, old = existing(bus, ssid)
+        ok, reason = watch(bus, device, active)
+        if ok:
+            break
+
+    if not ok and created and path is not None:
+        try:
+            call(bus, path, NM + ".Settings.Connection", "Delete", None, None)
+        except GLib.Error:
+            pass
+    if not ok and previous and previous != path:
+        try:
+            call(bus, NM_PATH, NM, "ActivateConnection",
+                 GLib.Variant("(ooo)", (previous, device, "/")), "(o)")
+        except GLib.Error:
+            pass
+    if ok:
+        say(ok=True, legacy=modes[i])
+    else:
+        fail(reason)
+
+
+if __name__ == "__main__":
+    main()

@@ -19,8 +19,9 @@ bind("V",      hl.dsp.exec_cmd(clipboard))
 bind("B",      hl.dsp.exec_cmd(browser))
 -- Files: the file manager (GTK, so it takes the same palette as the rest of the GTK apps).
 bind("E",      hl.dsp.exec_cmd("thunar"))
--- Lock the screen; hypridle locks on its own after idle time too.
-bind("L",      hl.dsp.exec_cmd("hyprlock -c " .. os.getenv("HOME") .. "/.config/hyprlock/hyprlock.conf"))
+-- Lock the screen (Windows' Win+L); hypridle locks on its own after idle time too.
+-- a4a-lock makes sure the lock screen shows the wallpaper that's on screen now.
+bind("L",      hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/a4a-lock"))
 
 -- Windows, with ML4W's layout: M maximize, F fullscreen, T float, J split, K swap split.
 bind("Q",             hl.dsp.window.close())
@@ -33,10 +34,12 @@ bind("K",             hl.dsp.layout("swapsplit"))
 bind("C",             hl.dsp.window.center())
 bind("P",             hl.dsp.window.pseudo())
 
--- Focus, resize and swap, with vim keys and arrows doing the same thing.
---   SUPER + direction         move focus
---   SUPER + SHIFT + direction resize the window by 100 px (hold to keep going)
---   SUPER + ALT + direction   swap the window with its neighbour
+-- Focus, resize and swap.
+--   SUPER + arrow                  move focus
+--   SUPER + SHIFT + arrow or hjkl  resize the window by 100 px (hold to keep going)
+--   SUPER + ALT + arrow or hjkl    swap the window with its neighbour
+-- Focus is arrows only: SUPER+J, K and L are already split, swap split and lock, and
+-- a second bind on the same keys ran both (SUPER+L locked *and* moved focus).
 local dirs = {
     -- vim key, arrow, focus direction, swap direction, resize x, resize y
     { "h", "left",  "left",  "l",  -100,    0 },
@@ -46,19 +49,31 @@ local dirs = {
 }
 for _, d in ipairs(dirs) do
     local vim, arrow, focusDir, swapDir, dx, dy = d[1], d[2], d[3], d[4], d[5], d[6]
+    bind(arrow, hl.dsp.focus({ direction = focusDir }))
     for _, key in ipairs({ vim, arrow }) do
-        bind(key,               hl.dsp.focus({ direction = focusDir }))
         bind("SHIFT + " .. key, hl.dsp.window.resize({ x = dx, y = dy, relative = true }),
              { repeating = true })
         bind("ALT + " .. key,   hl.dsp.window.swap({ direction = swapDir }))
     end
 end
 
+-- Windows' Alt+Tab: the next window on this workspace, raised if it floats.
+hl.bind("ALT + Tab", function()
+    hl.dispatch(hl.dsp.window.cycle_next())
+    hl.dispatch(hl.dsp.window.bring_to_top())
+end)
+-- Pin a floating window on every workspace (a video, a calculator).
+bind("Y",         hl.dsp.window.pin())
+-- Close a window that doesn't answer SUPER+Q.
+bind("SHIFT + Q", hl.dsp.window.kill())
+
 -- Workspaces: SUPER+[1-0] to go, SUPER+SHIFT+[1-0] to send.
+-- SUPER+ALT+[1-0] sends it without following, to tidy up and stay put.
 for i = 1, 10 do
     local key = i % 10
     bind(key,              hl.dsp.focus({ workspace = i }))
     bind("SHIFT + " .. key, hl.dsp.window.move({ workspace = i }))
+    bind("ALT + " .. key,   hl.dsp.window.move({ workspace = i, follow = false }))
 end
 -- Any workspace, not only 1-10: SUPER+G asks for a number and goes there,
 -- SUPER+SHIFT+G sends the window there (scripts/a4a-workspace).
@@ -68,6 +83,11 @@ bind("SHIFT + G", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/a4a-workspac
 -- exist ("e"), so empty ones are skipped. Desktops are then reached by number.
 bind("CTRL + left",  hl.dsp.focus({ workspace = "e-1" }))
 bind("CTRL + right", hl.dsp.focus({ workspace = "e+1" }))
+-- With SHIFT, the window goes along: carry it to the next or previous desktop.
+bind("CTRL + SHIFT + left",  hl.dsp.window.move({ workspace = "r-1" }))
+bind("CTRL + SHIFT + right", hl.dsp.window.move({ workspace = "r+1" }))
+-- Windows' Win+Ctrl+D: a fresh, empty desktop.
+bind("CTRL + D",   hl.dsp.focus({ workspace = "empty" }))
 bind("Tab",        hl.dsp.focus({ workspace = "previous" }))
 bind("mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 bind("mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
@@ -84,19 +104,30 @@ bind("Print",    hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/a4a-screensho
 -- Keyboard shortcut reference, opened in a terminal (ML4W's SUPER+CTRL+K).
 bind("CTRL + K", hl.dsp.exec_cmd("kitty --single-instance --title a4a-keys -e less " .. os.getenv("HOME") .. "/Projects/A4A/docs/keybinds.md"))
 
--- The island (centre pill) opens and closes through the bar's IPC handler.
+-- The bar's panels, through its IPC handler. Each key opens its page in the panel it
+-- belongs to, and closes it when pressed again (IslandState.toggleTo).
+--   I  the island's home      A  the control centre (Windows' Win+A)
+--   N  notifications (Win+N)   X  power: lock, log out, restart (Win+X)
+--   W  wallpaper picker        SHIFT+W a random wallpaper
+local function panel(page) return hl.dsp.exec_cmd("quickshell ipc call island go " .. page) end
 bind("I", hl.dsp.exec_cmd("quickshell ipc call island toggle"))
-
--- Wallpaper: W opens the picker on the island, SHIFT+W sets a random one.
-bind("W",       hl.dsp.exec_cmd("quickshell ipc call island view wallpaper"))
+bind("A", panel("control"))
+bind("N", panel("notifications"))
+bind("X", panel("power"))
+bind("W", panel("wallpaper"))
 bind("SHIFT + W", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/a4a-wallpaper random"))
+-- Notifications: clear the popups on screen; do not disturb on or off.
+bind("SHIFT + N", hl.dsp.exec_cmd("dunstctl close-all"))
+bind("CTRL + N",  hl.dsp.exec_cmd("dunstctl set-paused toggle"))
 
 -- Mouse: SUPER+LMB drag, SUPER+RMB resize
 bind("mouse:272", hl.dsp.window.drag(),   { mouse = true })
 bind("mouse:273", hl.dsp.window.resize(), { mouse = true })
 
--- Session (power menu comes with the Quickshell bar)
+-- Session (the power menu is SUPER+X)
 bind("SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))
+-- Restart the bar, after editing it or if it ever stops answering.
+bind("CTRL + R",  hl.dsp.exec_cmd("sh -c 'pkill -x quickshell; sleep 0.3; setsid quickshell >/dev/null 2>&1 &'"))
 bind("SHIFT + E", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
 
 -- Hardware keys. Each one then tells the bar to show its indicator (see OsdWindow.qml).

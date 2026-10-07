@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
-# BlueZ pairing agent. bluetoothd asks an agent to confirm or type a passkey
-# when a device pairs. Quickshell can't answer those requests, so without this
-# agent keyboards and mice fail with "No agent available for request type 2".
-# Started at login. It re-registers when bluetoothd restarts.
+# BlueZ pairing agent. When a device pairs, bluetoothd asks an agent to confirm a
+# code, type a PIN, or allow the device. Quickshell has no agent API, so this is
+# the agent, and it asks you through the bar: the control centre opens on a pairing
+# card (Pairing.qml) with the device and its code, and Pair / Decline. Your answer
+# comes back here on the session bus (com.a4a.BtAgent.Reply), and goes to BlueZ.
+#
+# If the bar isn't running, the question goes to a notification with Pair and
+# Decline buttons instead, so pairing never depends on the bar being up.
+#
+# Once a device has paired it is trusted, so it reconnects by itself after sleep,
+# and a notification says so. Started at login; registers again whenever
+# bluetoothd restarts.
+#
+#   a4a-bt-agent --test confirm|authorize|pin|passkey|display|service
+#       asks the question for a pretend device without BlueZ, and prints the answer.
 import subprocess
+import sys
 
 import gi
 
@@ -12,10 +24,12 @@ from gi.repository import Gio, GLib  # noqa: E402
 
 BUS = "org.bluez"
 AGENT_PATH = "/com/a4a/BluezAgent"
-# Most keyboards and mice that ask for a PIN use this one.
-DEFAULT_PIN = "0000"
+REPLY_NAME = "com.a4a.BtAgent"
+REPLY_PATH = "/com/a4a/BtAgent"
+# BlueZ gives up on an unanswered request after about 30 seconds; stop just before.
+ANSWER_TIMEOUT_S = 28
 
-INTROSPECTION = """
+AGENT_XML = """
 <node>
   <interface name="org.bluez.Agent1">
     <method name="Release"/>
@@ -52,89 +66,313 @@ INTROSPECTION = """
 </node>
 """
 
+REPLY_XML = """
+<node>
+  <interface name="com.a4a.BtAgent">
+    <method name="Reply">
+      <arg name="id" type="u" direction="in"/>
+      <arg name="accept" type="b" direction="in"/>
+      <arg name="value" type="s" direction="in"/>
+    </method>
+  </interface>
+</node>
+"""
+
+# The services a device most often asks for, by the first part of their UUID.
+SERVICES = {
+    "00001124": "keyboard, mouse or controller",
+    "0000110d": "audio",
+    "0000110b": "audio",
+    "0000111e": "hands-free calls",
+    "00001108": "headset",
+    "00001105": "file transfer",
+    "0000112f": "phone book",
+}
+
+system = None
+session = None
+# id -> {"kind", "device", "invocation" (None for display), "timer"}
+pending = {}
+next_id = [1]
+
 
 def notify(title, body):
     subprocess.Popen(["notify-send", "-a", "Bluetooth", title, body])
 
 
-def device_name(conn, path):
+def device_prop(path, name, default=None):
+    if system is None:
+        return default
     try:
-        alias = conn.call_sync(
+        value = system.call_sync(
             BUS, path, "org.freedesktop.DBus.Properties", "Get",
-            GLib.Variant("(ss)", ("org.bluez.Device1", "Alias")),
-            GLib.VariantType("(v)"), Gio.DBusCallFlags.NONE, 2000, None,
-        )
-        return alias.unpack()[0].unpack()
+            GLib.Variant("(ss)", ("org.bluez.Device1", name)),
+            GLib.VariantType("(v)"), Gio.DBusCallFlags.NONE, 2000, None)
+        return value.unpack()[0]
     except GLib.Error:
-        return path
+        return default
 
 
-def on_call(conn, sender, path, iface, method, params, invocation):
-    dev = params.unpack()[0] if method != "Cancel" and method != "Release" else None
-    name = device_name(conn, dev) if dev else ""
+def device_name(path):
+    return device_prop(path, "Alias") or device_prop(path, "Name") or "A Bluetooth device"
 
-    if method == "RequestPinCode":
-        invocation.return_value(GLib.Variant("(s)", (DEFAULT_PIN,)))
-    elif method == "DisplayPinCode":
-        notify("Pairing " + name, "Type PIN " + params.unpack()[1] + " on the device.")
-        invocation.return_value(None)
+
+def run_async(argv, done=None):
+    """Run a command without blocking the agent; done(ok, stdout) when it ends."""
+    try:
+        proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
+    except GLib.Error:
+        if done:
+            done(False, "")
+        return
+
+    def finished(p, res):
+        try:
+            _ok, out, _err = p.communicate_utf8_finish(res)
+        except GLib.Error:
+            out = ""
+        if done:
+            done(p.get_successful(), out or "")
+
+    proc.communicate_utf8_async(None, None, finished)
+
+
+def ipc(*args, done=None):
+    run_async(["quickshell", "ipc", "call", "pairing", *[str(a) for a in args]], done)
+
+
+# Answering ----------------------------------------------------------------------
+
+def answer(rid, accept, value=""):
+    """Send the answer for request `rid` to BlueZ. Called once per request."""
+    req = pending.pop(rid, None)
+    if req is None:
+        return
+    if req["timer"]:
+        GLib.source_remove(req["timer"])
+    inv = req["invocation"]
+    kind = req["kind"]
+
+    if kind == "display":
+        # Nothing to return; declining means stopping the pairing.
+        if not accept and system is not None:
+            try:
+                system.call_sync(BUS, req["device"], "org.bluez.Device1", "CancelPairing",
+                                 None, None, Gio.DBusCallFlags.NONE, 2000, None)
+            except GLib.Error:
+                pass
+        return
+    if not accept:
+        inv.return_dbus_error("org.bluez.Error.Rejected", "Declined")
+        return
+    if kind == "pin":
+        inv.return_value(GLib.Variant("(s)", (value or "0000",)))
+    elif kind == "passkey":
+        try:
+            inv.return_value(GLib.Variant("(u)", (int(value),)))
+        except ValueError:
+            inv.return_dbus_error("org.bluez.Error.Rejected", "Not a number")
+    else:
+        inv.return_value(None)
+
+
+def timed_out(rid):
+    if rid in pending:
+        ipc("cancel", rid)
+        answer(rid, False)
+    return False
+
+
+def ask(kind, device, code, invocation):
+    """Put a question to the user: the bar first, a notification if it isn't up."""
+    rid = next_id[0]
+    next_id[0] += 1
+    timer = GLib.timeout_add_seconds(ANSWER_TIMEOUT_S, timed_out, rid) if invocation else 0
+    pending[rid] = {"kind": kind, "device": device, "invocation": invocation, "timer": timer}
+    name = device_name(device) if device else "Test device"
+
+    def delivered(ok, _out):
+        if not ok:
+            ask_by_notification(rid, kind, name, code)
+
+    ipc("request", rid, kind, name, code, done=delivered)
+    return rid
+
+
+def ask_by_notification(rid, kind, name, code):
+    if kind == "display":
+        notify("Pairing " + name, "Type %s on the device, then press Enter." % code)
+        return
+    if kind == "passkey":
+        # Typing a passkey needs a field; a notification can't take one.
+        notify("Couldn't pair " + name, "It wants a passkey typed here. Open the bar and try again.")
+        answer(rid, False)
+        return
+    body = {
+        "confirm": "Code %s. Pair if it matches the device." % code,
+        "authorize": "It wants to pair with this computer.",
+        "service": "It wants to connect (%s)." % code,
+        "pin": "It will use PIN 0000.",
+    }.get(kind, "")
+    # dunst runs the action called "default" on a right-click (see the dunstrc
+    # template), so Pair is that one; a left-click closes it, which declines.
+    run_async(["notify-send", "-a", "Bluetooth", "-u", "critical", "-A", "default=Pair", "-A", "no=Decline",
+               "--wait", "Pair with " + name + "?", body + "\nRight-click to pair, click to decline."],
+              lambda ok, out: answer(rid, out.strip() == "default", "0000" if kind == "pin" else ""))
+
+
+# BlueZ's side ---------------------------------------------------------------------
+
+def find_display(device):
+    for rid, req in pending.items():
+        if req["kind"] == "display" and req["device"] == device:
+            return rid
+    return None
+
+
+def on_agent_call(_conn, _sender, _path, _iface, method, params, invocation):
+    args = params.unpack()
+    if method == "RequestConfirmation":
+        ask("confirm", args[0], "%06d" % args[1], invocation)
+    elif method == "RequestAuthorization":
+        ask("authorize", args[0], "", invocation)
+    elif method == "AuthorizeService":
+        device, uuid = args
+        # A trusted device doesn't need asking each time it connects.
+        if device_prop(device, "Trusted", False):
+            invocation.return_value(None)
+        else:
+            ask("service", device, SERVICES.get(uuid[:8].lower(), "a service"), invocation)
+    elif method == "RequestPinCode":
+        ask("pin", args[0], "", invocation)
     elif method == "RequestPasskey":
-        # Needs typing on the host, which the agent can't ask for. Reject so
-        # the pairing stops with an error instead of hanging.
-        notify("Pairing " + name + " failed", "It asked for a passkey typed on this PC.")
-        invocation.return_dbus_error("org.bluez.Error.Rejected", "No passkey UI")
+        ask("passkey", args[0], "", invocation)
     elif method == "DisplayPasskey":
-        passkey = params.unpack()[1]
-        notify("Pairing " + name, "Type %06d on the device, then press Enter." % passkey)
+        device, passkey, entered = args
+        rid = find_display(device)
+        if rid is None:
+            ask("display", device, "%06d" % passkey, None)
+        else:
+            ipc("entered", rid, entered)
         invocation.return_value(None)
-    elif method == "RequestConfirmation":
-        # Accepted without a prompt: the code is shown on the notification so
-        # it can be checked against the device.
-        passkey = params.unpack()[1]
-        notify("Pairing " + name, "Confirm code %06d matches the device." % passkey)
+    elif method == "DisplayPinCode":
+        if find_display(args[0]) is None:
+            ask("display", args[0], args[1], None)
         invocation.return_value(None)
-    elif method in ("RequestAuthorization", "AuthorizeService"):
+    elif method == "Cancel":
+        # BlueZ gave up on whatever was waiting: the device cancelled, or time ran out.
+        for rid in list(pending):
+            ipc("cancel", rid)
+            answer(rid, False)
         invocation.return_value(None)
-    elif method in ("Cancel", "Release"):
+    elif method == "Release":
         invocation.return_value(None)
     else:
         invocation.return_dbus_error("org.bluez.Error.Rejected", "Unknown method")
 
 
-def register(conn):
+def on_reply(_conn, _sender, _path, _iface, _method, params, invocation):
+    rid, accept, value = params.unpack()
+    answer(rid, accept, value)
+    invocation.return_value(None)
+
+
+# Gio passes the user data as a seventh argument, even when it's None.
+def on_device_changed(_c, _s, path, _i, _sig, params, _data=None):
+    iface, changed, _gone = params.unpack()
+    if iface != "org.bluez.Device1" or changed.get("Paired") is not True:
+        return
+    # A code shown for typing is done with once the device has paired.
+    rid = find_display(path)
+    if rid is not None:
+        ipc("cancel", rid)
+        pending.pop(rid, None)
+    # Trusted, so it reconnects by itself after sleep or a reboot.
     try:
-        conn.call_sync(
-            BUS, "/org/bluez", "org.bluez.AgentManager1", "RegisterAgent",
-            GLib.Variant("(os)", (AGENT_PATH, "KeyboardDisplay")),
-            None, Gio.DBusCallFlags.NONE, 2000, None,
-        )
-        conn.call_sync(
-            BUS, "/org/bluez", "org.bluez.AgentManager1", "RequestDefaultAgent",
-            GLib.Variant("(o)", (AGENT_PATH,)),
-            None, Gio.DBusCallFlags.NONE, 2000, None,
-        )
+        system.call_sync(BUS, path, "org.freedesktop.DBus.Properties", "Set",
+                         GLib.Variant("(ssv)", ("org.bluez.Device1", "Trusted", GLib.Variant("b", True))),
+                         None, Gio.DBusCallFlags.NONE, 2000, None)
+    except GLib.Error:
+        pass
+    notify("Paired with " + device_name(path), "It will reconnect by itself from now on.")
+
+
+def register():
+    try:
+        system.call_sync(BUS, "/org/bluez", "org.bluez.AgentManager1", "RegisterAgent",
+                         GLib.Variant("(os)", (AGENT_PATH, "KeyboardDisplay")),
+                         None, Gio.DBusCallFlags.NONE, 2000, None)
+        system.call_sync(BUS, "/org/bluez", "org.bluez.AgentManager1", "RequestDefaultAgent",
+                         GLib.Variant("(o)", (AGENT_PATH,)), None, Gio.DBusCallFlags.NONE, 2000, None)
+        print("a4a-bt-agent: registered", flush=True)
     except GLib.Error as err:
         # Already registered (harmless) or bluetoothd not up yet.
         print("a4a-bt-agent: register: " + err.message, flush=True)
 
 
+def on_owner(_c, _s, _p, _i, _sig, params, _data=None):
+    _name, _old, new = params.unpack()
+    if new:
+        register()
+
+
+def serve_replies():
+    global session
+    session = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    info = Gio.DBusNodeInfo.new_for_xml(REPLY_XML).interfaces[0]
+    session.register_object_with_closures2(REPLY_PATH, info, on_reply, None, None)
+    Gio.bus_own_name_on_connection(session, REPLY_NAME, Gio.BusNameOwnerFlags.REPLACE
+                                   | Gio.BusNameOwnerFlags.ALLOW_REPLACEMENT, None, None)
+
+
+class FakeInvocation:
+    """Stands in for BlueZ's call in --test mode: prints what BlueZ would get."""
+
+    def __init__(self, loop):
+        self.loop = loop
+
+    def return_value(self, value):
+        print("ANSWER accepted" + ("" if value is None else " " + str(value.unpack()[0])), flush=True)
+        self.loop.quit()
+
+    def return_dbus_error(self, name, msg):
+        print("ANSWER rejected (%s)" % msg, flush=True)
+        self.loop.quit()
+
+
+def test(kind):
+    loop = GLib.MainLoop()
+    serve_replies()
+    code = {"confirm": "042517", "display": "123456", "service": SERVICES["00001124"]}.get(kind, "")
+    if kind == "display":
+        ask(kind, None, code, None)
+        # Pretend three digits get typed, a second apart, then the device pairs.
+        for n in (1, 2, 3):
+            GLib.timeout_add_seconds(n, lambda n=n: ipc("entered", 1, n) or False)
+        GLib.timeout_add_seconds(5, lambda: (ipc("cancel", 1), print("ANSWER shown, then paired"), loop.quit()) and False)
+    else:
+        ask(kind, None, code, FakeInvocation(loop))
+    loop.run()
+
+
 def main():
-    bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
-    info = Gio.DBusNodeInfo.new_for_xml(INTROSPECTION).interfaces[0]
-    bus.register_object(AGENT_PATH, info, on_call, None, None)
+    global system
+    if len(sys.argv) == 3 and sys.argv[1] == "--test":
+        test(sys.argv[2])
+        return
 
-    # bluetoothd sends NameOwnerChanged when it starts or restarts. Each time
-    # it comes back, the agent is registered again.
-    def on_owner(_c, _s, _p, _i, _sig, params):
-        _name, _old, new = params.unpack()
-        if new:
-            register(bus)
+    system = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    serve_replies()
+    info = Gio.DBusNodeInfo.new_for_xml(AGENT_XML).interfaces[0]
+    system.register_object_with_closures2(AGENT_PATH, info, on_agent_call, None, None)
 
-    bus.signal_subscribe(
-        "org.freedesktop.DBus", "org.freedesktop.DBus", "NameOwnerChanged",
-        "/org/freedesktop/DBus", BUS, Gio.DBusSignalFlags.NONE, on_owner, None,
-    )
-    register(bus)
+    # bluetoothd sends NameOwnerChanged when it starts or restarts. Each time it
+    # comes back, the agent is registered again.
+    system.signal_subscribe("org.freedesktop.DBus", "org.freedesktop.DBus", "NameOwnerChanged",
+                            "/org/freedesktop/DBus", BUS, Gio.DBusSignalFlags.NONE, on_owner, None)
+    system.signal_subscribe(BUS, "org.freedesktop.DBus.Properties", "PropertiesChanged", None,
+                            "org.bluez.Device1", Gio.DBusSignalFlags.NONE, on_device_changed, None)
+    register()
     GLib.MainLoop().run()
 
 

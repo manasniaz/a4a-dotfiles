@@ -20,6 +20,13 @@ Singleton {
     readonly property color pill: surface
     // Cards sit on the pill, a step lighter so they read as separate groups.
     readonly property color card: Qt.lighter(surface, 1.35)
+    // Secondary text: the same hue as fg, quieter. Hierarchy comes from this and from
+    // size and weight, so the bar needs no extra colours.
+    readonly property color fgDim: Qt.rgba(fg.r, fg.g, fg.b, 0.62)
+    // Captions: card titles, small labels. Quieter still, but readable on a card.
+    readonly property color fgFaint: Qt.rgba(fg.r, fg.g, fg.b, 0.42)
+    // Hairlines: pill borders and the dividers between groups.
+    readonly property color line: Qt.rgba(muted.r, muted.g, muted.b, 0.55)
 
     // Arch Linux's brand blue. The only colour here that doesn't come from the
     // wallpaper: the logo is meant to be recognisable as Arch wherever it is.

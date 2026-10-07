@@ -6,37 +6,47 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    // Set false while something is shown after it, so the pill stays short.
-    readonly property bool showName: IslandState.shown.length === 0
+    // Only when the island shows nothing else, so the pill stays short.
+    readonly property bool showName: IslandState.shownIn("centre").length === 0
 
-    implicitWidth: row.implicitWidth
-    implicitHeight: row.implicitHeight
+    implicitWidth: row.implicitWidth + 2 * 6
+    implicitHeight: 28
+
+    Hover {
+        hovered: mouse.containsMouse
+        pressed: mouse.pressed
+    }
 
     RowLayout {
         id: row
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.centerIn: parent
         spacing: 7
+        scale: mouse.pressed ? 0.94 : 1
 
-    Icon {
-        Layout.alignment: Qt.AlignVCenter
-        kind: "arch"
-        color: Theme.arch
-        font.pixelSize: 22
-    }
+        Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
 
-    Text {
-        visible: root.showName
-        Layout.alignment: Qt.AlignVCenter
-        text: "Arch Linux"
-        color: Theme.fg
-        font.pixelSize: 13
-        font.weight: Font.DemiBold
-    }
+        Icon {
+            Layout.alignment: Qt.AlignVCenter
+            kind: "arch"
+            color: Theme.arch
+            font.pixelSize: 22
+        }
+
+        Text {
+            visible: root.showName
+            Layout.alignment: Qt.AlignVCenter
+            text: "Arch Linux"
+            color: Theme.fg
+            font.pixelSize: 13
+            font.weight: Font.DemiBold
+        }
     }
 
     // Over the whole mark, so the logo and its name both open the island.
     MouseArea {
+        id: mouse
         anchors.fill: parent
+        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: IslandState.toggle()
     }

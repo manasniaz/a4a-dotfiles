@@ -1,11 +1,11 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
 
-// The power menu, behind the power icon in the island header. Lock runs at once,
-// since you unlock it again. The rest need a second click, so a stray click can't
-// log you out or switch the machine off.
+// The power menu, in the control centre (its power button, P, or SUPER+X). Lock runs
+// at once, since you unlock it again. The rest need a second click, so a stray click
+// can't log you out or switch the machine off. The power mode is on the control
+// centre's front page.
 ColumnLayout {
     id: root
 
@@ -13,56 +13,6 @@ ColumnLayout {
 
     DetailHeader {
         title: "Power"
-        backTo: "home"
-    }
-
-    // The active mode, read when the page opens. powerprofilesctl talks to
-    // power-profiles-daemon, which handles the CPU and platform settings.
-    property string profile: ""
-
-    Process {
-        command: ["powerprofilesctl", "get"]
-        running: true
-        stdout: StdioCollector {
-            id: current
-            onStreamFinished: root.profile = current.text.trim()
-        }
-    }
-
-    function setProfile(name) {
-        Quickshell.execDetached(["powerprofilesctl", "set", name])
-        profile = name
-    }
-
-    Card {
-        title: "Mode"
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 6
-
-            Tile {
-                Layout.fillWidth: true
-                implicitHeight: 34
-                label: "Saver"
-                armed: root.profile === "power-saver"
-                onActivated: root.setProfile("power-saver")
-            }
-            Tile {
-                Layout.fillWidth: true
-                implicitHeight: 34
-                label: "Balanced"
-                armed: root.profile === "balanced"
-                onActivated: root.setProfile("balanced")
-            }
-            Tile {
-                Layout.fillWidth: true
-                implicitHeight: 34
-                label: "Performance"
-                armed: root.profile === "performance"
-                onActivated: root.setProfile("performance")
-            }
-        }
     }
 
     Card {
@@ -76,7 +26,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 implicitHeight: 34
                 label: "Lock"
-                onActivated: IslandState.run(["hyprlock", "-c", Quickshell.env("HOME") + "/.config/hyprlock/hyprlock.conf"])
+                onActivated: IslandState.run([Quickshell.env("HOME") + "/.local/bin/a4a-lock"])
             }
             Tile {
                 Layout.fillWidth: true

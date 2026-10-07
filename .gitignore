@@ -1,2 +1,7 @@
 # btop's colours, generated from the wallpaper by matugen (matugen/config.toml).
 btop/themes/a4a.theme
+
+# Python bytecode from the scripts (a4a-wifi-join is imported in tests).
+scripts/__pycache__/
+__pycache__/
+*.pyc

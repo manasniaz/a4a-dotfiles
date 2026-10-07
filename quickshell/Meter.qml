@@ -21,7 +21,10 @@ RowLayout {
         font.letterSpacing: 0.6
     }
 
+    // Stretches when the meter is given room (Layout.fillWidth), 42 px otherwise.
     Rectangle {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 42
         implicitWidth: 42
         implicitHeight: 6
         radius: 3
@@ -45,6 +48,8 @@ RowLayout {
         text: root.valueText
         color: Theme.fg
         font.pixelSize: 12
+        font.features: { "tnum": 1 }
+        horizontalAlignment: Text.AlignRight
         Layout.minimumWidth: 34
     }
 }

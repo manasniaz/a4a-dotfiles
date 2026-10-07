@@ -27,8 +27,18 @@ PACKAGES=(
     # quickshell: the bar. Framework only, every widget is ours.
     # upower feeds the battery widget.
     quickshell upower
-    # wifi and bluetooth come from NetworkManager and bluez (the island controls them)
-    networkmanager bluez bluez-utils
+    # wifi and bluetooth come from NetworkManager and bluez (the control centre
+    # controls them). nm-connection-editor: "Network settings…" and "Advanced…" on the
+    # Wi-Fi page, for what the built-in forms don't cover.
+    networkmanager bluez bluez-utils nm-connection-editor
+    # a4a-bt-agent and a4a-wifi-join talk D-Bus through GLib's Python bindings
+    python-gobject
+    # the updates card counts pending updates with checkupdates
+    pacman-contrib
+    # night light
+    hyprsunset
+    # file manager (SUPER+E)
+    thunar
     # terminal: the emulator, the monitors and the system info tool
     cava btop fastfetch
     # power modes: power-profiles-daemon runs the modes, powerprofilesctl sets them
@@ -64,6 +74,8 @@ SCRIPTS=(
     a4a-greeter
     a4a-bt-agent
     a4a-workspace
+    a4a-wifi-join
+    a4a-lock
 )
 
 info() { printf '\033[1;34m::\033[0m %s\n' "$*"; }
@@ -112,9 +124,6 @@ main() {
     for script in "${SCRIPTS[@]}"; do
         link_path "scripts/$script" "$BIN_DIR/$script"
     done
-    if grep -q YOUR_USER "$REPO_DIR/btop/btop.conf"; then
-        info "Set your user name in btop/btop.conf (replace YOUR_USER), then restart btop."
-    fi
     info "Done."
 }
 

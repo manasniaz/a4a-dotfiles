@@ -17,7 +17,11 @@ RowLayout {
         Layout.fillWidth: true
         spacing: 1
 
+        // fillWidth here, not only on the column: a layout is never wider than its
+        // children allow, so without it the switch trailed the label.
         Text {
+            Layout.fillWidth: true
+            elide: Text.ElideRight
             text: root.label
             color: Theme.fg
             font.pixelSize: 13
@@ -26,7 +30,7 @@ RowLayout {
         Text {
             visible: root.hint !== ""
             text: root.hint
-            color: Theme.muted
+            color: Theme.fgFaint
             font.pixelSize: 11
         }
     }
